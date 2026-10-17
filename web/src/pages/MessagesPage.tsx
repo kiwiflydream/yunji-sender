@@ -19,9 +19,15 @@ export function MessagesPage() {
   const messages = useInfiniteQuery({
     queryKey: ['messages', filter],
     queryFn: ({ pageParam }) => api.messages(filter, pageParam),
-    initialPageParam: undefined as number | undefined,
+    initialPageParam: undefined as string | undefined,
     getNextPageParam: (last) => last.nextBefore ?? undefined,
-    refetchInterval: 5_000,
+    // Infinite queries refetch every loaded page. Keep the live first page
+    // responsive, but refresh history less often as the list grows.
+    refetchInterval: (q) => {
+      const pages = q.state.data?.pages ?? []
+      const active = pages.some((p) => p.messages.some((m) => m.counts.pending > 0))
+      return (active ? 5_000 : 30_000) * Math.max(1, pages.length)
+    },
   })
   const rows = messages.data?.pages.flatMap((p) => p.messages) ?? []
   const filtered = !!(filter.status || filter.topic)

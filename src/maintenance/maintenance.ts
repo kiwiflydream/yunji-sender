@@ -122,12 +122,15 @@ async function purge(db: D1Database, settings: { retentionDays: number; statsRet
   const cutoff = now - settings.retentionDays * DAY_MS
   let purgedMessages = 0
   for (let i = 0; i < MAX_PURGE_BATCHES; i++) {
-    // send_at guards messages scheduled far ahead; deliveries go with their message (FK cascade).
+    // Keep unfinished work even past retention (backlogs and manual retries).
     // RETURNING counts messages only: meta.changes would include the cascaded deliveries.
     const { results } = await db
       .prepare(
         `DELETE FROM messages WHERE id IN (
-           SELECT id FROM messages WHERE created_at < ?1 AND send_at < ?1 ORDER BY created_at LIMIT ?2) RETURNING id`,
+           SELECT m.id FROM messages m WHERE m.created_at < ?1 AND m.send_at < ?1
+           AND NOT EXISTS (
+             SELECT 1 FROM deliveries d WHERE d.message_id = m.id AND d.status IN ('scheduled', 'queued', 'sending')
+           ) ORDER BY m.created_at LIMIT ?2) RETURNING id`,
       )
       .bind(cutoff, PURGE_BATCH)
       .all()

@@ -88,6 +88,9 @@ function checkType(type: ChannelType, c: Record<string, ChannelConfigValue>, iss
   if (type === 'telegram' && s('messageThreadId') && !/^\d+$/.test(s('messageThreadId'))) {
     issues.push({ path: 'config.messageThreadId', message: '必须是数字' })
   }
+  if (type === 'serverchan' && !/^(?:SCT[A-Za-z0-9]+|sctp\d+t[A-Za-z0-9]+)$/.test(s('sendKey'))) {
+    issues.push({ path: 'config.sendKey', message: '请输入有效的 SCT 或 sctp{uid}t 格式 SendKey' })
+  }
   if (type === 'email') {
     for (const key of ['to', 'cc']) {
       const bad = s(key).split(/[,;\n]/).map((a) => a.trim()).filter(Boolean).find((a) => !/^[^@\s]+@[^@\s]+$/.test(a.replace(/^.*<(.+)>$/, '$1')))

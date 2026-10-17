@@ -10,6 +10,8 @@ export const CHANNEL_TYPES = [
   'slack',
   'discord',
   'bark',
+  'pushplus',
+  'serverchan',
   'email',
 ] as const
 export type ChannelType = (typeof CHANNEL_TYPES)[number]

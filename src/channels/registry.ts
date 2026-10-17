@@ -4,6 +4,8 @@ import { dingtalkProvider } from './providers/dingtalk'
 import { discordProvider } from './providers/discord'
 import { emailProvider } from './providers/email'
 import { feishuProvider } from './providers/feishu'
+import { pushplusProvider } from './providers/pushplus'
+import { serverchanProvider } from './providers/serverchan'
 import { slackProvider } from './providers/slack'
 import { telegramProvider } from './providers/telegram'
 import { webhookProvider } from './providers/webhook'
@@ -19,6 +21,8 @@ const PROVIDERS: Record<ChannelType, ChannelProvider> = {
   slack: slackProvider,
   discord: discordProvider,
   bark: barkProvider,
+  pushplus: pushplusProvider,
+  serverchan: serverchanProvider,
   email: emailProvider,
 }
 

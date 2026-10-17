@@ -1,6 +1,6 @@
 # cf-sender
 
-运行在 Cloudflare 上的多渠道通知网关：一个 API 发消息，按主题扇出到 Webhook、Telegram、飞书、企业微信、钉钉、Slack、Discord、Bark、Email（Resend）。失败自动退避重试，支持定时发送、幂等键、投递记录与统计图表，[Kumo](https://github.com/cloudflare/kumo) 管理后台。设计见 [docs/design.md](docs/design.md)。
+运行在 Cloudflare 上的多渠道通知网关：一个 API 发消息，按主题扇出到 Webhook、Telegram、飞书、企业微信、钉钉、Slack、Discord、Bark、PushPlus、Server酱、Email（Resend）。失败自动退避重试，支持定时发送、幂等键、投递记录与统计图表，[Kumo](https://github.com/cloudflare/kumo) 管理后台。设计见 [docs/design.md](docs/design.md)。
 
 技术栈：Hono · Workers · Queues（投递与重试，可关闭）· D1（配置、日志、统计）· Cron（定时消息、补偿、清理）；后台是 React + Kumo 单页应用，由 Vite + `@cloudflare/vite-plugin` 构建为 Workers 静态资源。
 
@@ -52,6 +52,8 @@ await env.SENDER.send({ topic: 'ops-alert', title: '任务失败', body: '...', 
 
 ## 本地开发
 
+需要 Node.js ≥ 22.12 和 pnpm 10.34.4（版本固定在 `package.json`）。
+
 ```sh
 pnpm install
 cp .dev.vars.example .dev.vars   # 填入 ENCRYPTION_KEY：openssl rand -base64 32
@@ -63,6 +65,7 @@ pnpm dev                          # http://localhost:5173/admin（admin / .dev.v
 pnpm test        # vitest，在 workerd 中运行
 pnpm typecheck   # Worker、前端、测试三套 tsconfig
 pnpm build
+pnpm check       # 依次执行 typecheck、test、build；CI 和 deploy 共用此检查
 pnpm cf-typegen  # 修改 wrangler.jsonc 后重新生成 worker-configuration.d.ts
 ```
 
@@ -80,7 +83,15 @@ wrangler secret put ADMIN_PASSWORD               # 后台 basic 认证密码
 pnpm run deploy
 ```
 
+后续更新新增迁移时，也需要先执行 `pnpm db:migrate:remote`，再部署。`deploy` 会先运行完整检查，通过后才发布；GitHub CI 在 push 和 pull request 时运行相同检查，无需部署密钥。
+
 部署后在后台创建渠道、主题和 API Key。
+
+**PushPlus**：添加渠道时填入用户 Token 或消息 Token，默认推送到自己的微信公众号。可选填 PushPlus 群组编码、接收渠道、渠道配置编码和指定接收人；群组编码与本系统的主题独立。选择短信、语音渠道会使用 PushPlus 的付费服务。Token 和指定接收人加密保存。[官方接口文档](https://pushplus.plus/doc/guide/api.html)
+
+**Server酱**：填入 SendKey，自动识别 Turbo 的 `SCT...` 和 Server酱³ 的 `sctp{uid}t...`；接收通道在 Server酱平台配置。SendKey 加密保存，消息正文支持 Markdown；缺少标题时从正文生成，标题整理为单行并截断至 32 个 UTF-16 单元。[SendKey 获取说明](https://sct.ftqq.com/docs/getting-started/sendkey/)
+
+这两个渠道在后台都支持「发送测试消息」。投递成功表示上游 API 已受理；其中 PushPlus 异步发送，本项目尚未接入其最终送达回调。账号受限、凭据错误等业务失败会记录原因；网络错误、HTTP 429/5xx 和 PushPlus 系统异常会自动重试，PushPlus `900` 账号受限会停止重试。
 
 **不用 Queues（例如免费套餐）**：删掉 wrangler.jsonc 的 `queues` 段，运行 `pnpm cf-typegen`，在后台「设置」选择「直接发送」。到期的消息在请求的 `waitUntil` 里发送；定时消息和重试由每分钟的 Cron 处理，精度约 1 分钟。
 

@@ -42,13 +42,13 @@ failed / canceled ──手动重试──▶ queued
 1. 派发到期（queue 模式：12 h 内到期）的 `scheduled` 投递，先 CAS 改为 `queued` 再入队。
 2. `queued` 超过计划时间 15 分钟仍未开始的（入队丢失、进了 DLQ、waitUntil 被截断）改回 `scheduled`。
 3. `sending` 租约（60 s）过期的按可重试失败处理。
-4. 每小时清理超过保留期的消息（投递随外键级联删除；`send_at` 未到的消息不删）和统计。
+4. 每小时清理超过保留期且全部投递已结束的消息（投递随外键级联删除；`send_at` 未到或仍有 `scheduled / queued / sending` 投递的消息不删）和统计。积压与旧消息的手动重试同样受保护。
 
 每步最多处理 500 行，积压分几分钟消化。
 
 ## 重试与错误分类
 
-`src/channels/http.ts` 统一分类：网络错误、超时（10 s）、408、429、5xx 可重试；其他 4xx 不重试。各渠道再识别业务错误码：飞书 9499/11232、企业微信 45009、钉钉 130101、Telegram `error_code: 429` 视为限流可重试，其余业务错误不重试。
+`src/channels/http.ts` 统一分类：网络错误、超时（10 s）、408、429、5xx 可重试；其他 4xx 不重试。各渠道再识别业务错误码：飞书 9499/11232、企业微信 45009、钉钉 130101、Telegram `error_code: 429` 视为限流可重试；PushPlus 业务码 500 可重试，900 表示账号受限，按官方要求停止请求；Server酱非零业务码不自动重试。其余业务错误不重试。
 
 退避：10 s、30 s、2 min、10 min、30 min、1 h（之后保持 1 h），总尝试次数由运行设置 `maxAttempts`（默认 5）决定。响应带 `Retry-After`（或 Telegram/Discord 的 `retry_after`）时以它为准，限制在 1 s – 1 h。不做主动限流，靠 429 退避。
 
@@ -68,9 +68,17 @@ failed / canceled ──手动重试──▶ queued
 | Slack | 转 mrkdwn | header + section blocks |
 | Discord | 原样 | embed，颜色随 level，禁止 @mention |
 | Bark | 去掉标记 | level warn/error → timeSensitive |
+| PushPlus | 原样 | markdown / txt 模板；token、channel、topic、option、to 由渠道配置固定；200 仅表示受理，未接最终送达回调 |
+| Server酱 | 原样 | SCT / sctp SendKey 自动选择端点；标题单行、最长 32 个 UTF-16 单元；接收人使用平台配置，raw 不能覆盖 channel / openid |
 | Email | 转 HTML | Resend，`Idempotency-Key` 用投递 id，重试不会重复发信 |
 
-`raw[渠道类型]` 替换生成的请求体，渠道仍补上路由字段（chat_id、device_key、飞书签名、邮件 from/to）。
+`raw[渠道类型]` 替换生成的请求体，渠道仍补上路由字段（chat_id、device_key、飞书签名、邮件 from/to、PushPlus 凭据与接收目标）。Server酱从 SendKey 确定端点，并移除 raw 中的 channel / openid，保证接收目标由平台配置决定。
+
+## 消息列表
+
+- 按 `(created_at DESC, id DESC)` 稳定排序，`nextBefore` 是包含时间和 id 的不透明游标，原样作为下一页的 `before` 参数传回；仍接受旧的纯时间戳 `before`。多取一行判断是否还有下一页。
+- 先按游标、主题与状态筛选消息并选出当前页，再聚合该页的投递；状态筛选通过 `message_id` 索引逐条检查，避免先截取有限条消息再筛选造成漏结果。新增迁移为普通列表与主题列表分别建立联合索引。
+- 后台首屏有未完成投递时每 5 秒刷新，否则每 30 秒刷新；已加载多页时按页数延长间隔，限制历史浏览产生的重复请求。发送、取消和重试仍会主动刷新缓存。
 
 ## 统计
 

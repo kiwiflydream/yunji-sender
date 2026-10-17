@@ -258,14 +258,16 @@ const STATUS_HAVING: Record<MessageStatus, string> = {
   canceled: 'pending = 0 AND sent = 0 AND failed = 0 AND ? IS NOT NULL',
 }
 
-const AGGREGATE = `SELECT m.id, m.topic_slug, m.source, m.api_key_id, m.send_at, m.created_at,
-  json_extract(m.payload, '$.title') AS title, json_extract(m.payload, '$.level') AS level,
-  COUNT(d.id) AS total,
+const DELIVERY_COUNTS = `COUNT(d.id) AS total,
   COALESCE(SUM(d.status = 'sent'), 0) AS sent,
   COALESCE(SUM(d.status = 'failed'), 0) AS failed,
   COALESCE(SUM(d.status = 'canceled'), 0) AS canceled,
   COALESCE(SUM(d.status IN ('scheduled', 'queued', 'sending')), 0) AS pending,
   COALESCE(SUM(d.status = 'scheduled'), 0) AS scheduled`
+
+const AGGREGATE = `SELECT m.id, m.topic_slug, m.source, m.api_key_id, m.send_at, m.created_at,
+  json_extract(m.payload, '$.title') AS title, json_extract(m.payload, '$.level') AS level,
+  ${DELIVERY_COUNTS}`
 
 function rowToSummary(r: MessageRow, now: number): MessageSummary {
   const counts: DeliveryCounts = {
@@ -294,7 +296,9 @@ export const MESSAGE_STATUSES = ['scheduled', 'pending', 'sent', 'partial', 'fai
 
 export const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
-  before: z.coerce.number().int().positive().optional(),
+  // New cursors include the id to break timestamp ties; accept old timestamps too.
+  before: z.string().max(128).regex(/^[1-9]\d*(?::[A-Za-z0-9-]+)?$/)
+    .refine((v) => Number.isSafeInteger(Number(v.split(':')[0])), '无效的分页游标').optional(),
   topic: z.string().trim().min(1).optional(),
   status: z.enum(MESSAGE_STATUSES).optional(),
 })
@@ -303,32 +307,46 @@ export async function listMessages(
   db: D1Database,
   q: z.output<typeof listQuerySchema>,
   now = Date.now(),
-): Promise<{ messages: MessageSummary[]; nextBefore: number | null }> {
+): Promise<{ messages: MessageSummary[]; nextBefore: string | null }> {
   const where: string[] = []
   const params: unknown[] = []
   if (q.before) {
-    where.push('m.created_at < ?')
-    params.push(q.before)
+    const [at, id] = q.before.split(':')
+    if (id) {
+      where.push('(m.created_at, m.id) < (?, ?)')
+      params.push(Number(at), id)
+    } else {
+      where.push('m.created_at < ?')
+      params.push(Number(at))
+    }
   }
   if (q.topic) {
     where.push('m.topic_slug = ?')
     params.push(q.topic)
   }
-  let having = ''
   if (q.status) {
-    having = `HAVING ${STATUS_HAVING[q.status]}`
+    // Probe each candidate via the message_id index while walking messages in
+    // cursor order. Apply status before LIMIT so sparse matches fill the page.
+    where.push(`EXISTS (
+      SELECT ${DELIVERY_COUNTS} FROM deliveries d WHERE d.message_id = m.id
+      HAVING ${STATUS_HAVING[q.status]}
+    )`)
     params.push(now)
   }
   const { results } = await db
     .prepare(
-      `${AGGREGATE} FROM messages m LEFT JOIN deliveries d ON d.message_id = m.id
-       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-       GROUP BY m.id ${having} ORDER BY m.created_at DESC LIMIT ?`,
+      `WITH page AS (
+         SELECT m.* FROM messages m ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+         ORDER BY m.created_at DESC, m.id DESC LIMIT ?
+       )
+       ${AGGREGATE} FROM page m LEFT JOIN deliveries d ON d.message_id = m.id
+       GROUP BY m.id ORDER BY m.created_at DESC, m.id DESC`,
     )
-    .bind(...params, q.limit)
+    .bind(...params, q.limit + 1)
     .all<MessageRow>()
-  const messages = results.map((r) => rowToSummary(r, now))
-  return { messages, nextBefore: messages.length === q.limit ? messages[messages.length - 1].createdAt : null }
+  const messages = results.slice(0, q.limit).map((r) => rowToSummary(r, now))
+  const last = messages.at(-1)
+  return { messages, nextBefore: results.length > q.limit && last ? `${last.createdAt}:${last.id}` : null }
 }
 
 export async function getMessage(db: D1Database, id: string, now = Date.now()): Promise<MessageDetail | null> {

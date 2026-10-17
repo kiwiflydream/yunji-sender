@@ -222,6 +222,31 @@ describe('maintenance', () => {
     expect((await runMaintenance(env, noWait)).purgedMessages).toBe(0)
   })
 
+  it('keeps old messages with unfinished deliveries, including mixed outcomes', async () => {
+    await setSettings({ retentionDays: 1 })
+    const now = Date.now()
+    const old = now - 3 * 86_400_000
+    for (const status of ['scheduled', 'queued', 'sending', 'sent'] as const) {
+      await env.DB.prepare(`INSERT INTO messages (id, source, payload, send_at, created_at) VALUES (?, 'admin', '{}', ?, ?)`)
+        .bind(status, old, old).run()
+      await env.DB.prepare(
+        `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, status,
+           next_attempt_at, lease_until, created_at, updated_at)
+         VALUES (?, ?, 'c', 'webhook', 'c', ?, ?, ?, ?, ?)`,
+      ).bind(status, status, status, now + 86_400_000, now + 3600_000, old, old).run()
+    }
+    await env.DB.prepare(
+      `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, status, next_attempt_at, created_at, updated_at)
+       VALUES ('mixed', 'scheduled', 'c2', 'webhook', 'c2', 'sent', ?, ?, ?)`,
+    ).bind(old, old, old).run()
+
+    const report = await runMaintenance(envWithQueue().env, noWait, now)
+    expect(report.purgedMessages).toBe(1)
+    const { results } = await env.DB.prepare('SELECT id FROM messages ORDER BY id').all()
+    expect(results).toEqual([{ id: 'queued' }, { id: 'scheduled' }, { id: 'sending' }])
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM deliveries').first()).toEqual({ n: 4 })
+  })
+
   it('runs from the scheduled handler', async () => {
     const ctx = createExecutionContext()
     await worker.scheduled(createScheduledController({ cron: '* * * * *' }), env, ctx)

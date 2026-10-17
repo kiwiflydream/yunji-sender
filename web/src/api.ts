@@ -89,12 +89,12 @@ export const api = {
   revokeKey: (id: string) => request<void>(`/keys/${id}/revoke`, json('POST')),
   deleteKey: (id: string) => request<void>(`/keys/${id}`, json('DELETE')),
   send: (input: SendRequest) => request<SendResult>('/send', json('POST', input)),
-  messages: (filter: MessageFilter, before?: number) => {
+  messages: (filter: MessageFilter, before?: string) => {
     const q = new URLSearchParams({ limit: '50' })
     if (before) q.set('before', String(before))
     if (filter.status) q.set('status', filter.status)
     if (filter.topic) q.set('topic', filter.topic)
-    return request<{ messages: MessageSummary[]; nextBefore: number | null }>(`/messages?${q}`)
+    return request<{ messages: MessageSummary[]; nextBefore: string | null }>(`/messages?${q}`)
   },
   message: (id: string) => request<{ message: MessageDetail }>(`/messages/${id}`).then((r) => r.message),
   cancelMessage: (id: string) => request<{ canceled: number }>(`/messages/${id}/cancel`, json('POST')).then((r) => r.canceled),

@@ -1,12 +1,17 @@
 {
   "name": "cf-sender",
   "type": "module",
+  "packageManager": "pnpm@10.34.4",
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "dev": "vite dev",
-    "deploy": "vite build && wrangler deploy",
+    "deploy": "pnpm check && wrangler deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings --strict-vars=false",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web && tsc --noEmit -p test",
     "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test && pnpm build",
     "db:migrate:local": "wrangler d1 migrations apply cf-sender --local",
     "db:migrate:remote": "wrangler d1 migrations apply cf-sender --remote",
     "build": "vite build",
