@@ -1,3 +1,4 @@
-# openssl rand -base64 32 — encrypts channel credentials; losing it makes saved channels unreadable.
+# Generate with: openssl rand -base64 32. Encrypts channel credentials; keep it safe.
 ENCRYPTION_KEY=
-ADMIN_PASSWORD=change-me
+# Basic auth password for /admin (default username: admin). Set a strong password.
+ADMIN_PASSWORD=

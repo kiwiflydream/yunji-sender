@@ -1,5 +1,7 @@
 # cf-sender
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/YOUR_USERNAME/cf-sender)
+
 运行在 Cloudflare 上的多渠道通知网关：一个 API 发消息，按主题扇出到 Webhook、Telegram、飞书、企业微信、钉钉、Slack、Discord、Bark、PushPlus、Server酱、Email（Resend）。失败自动退避重试，支持定时发送、幂等键、投递记录与统计图表，[Kumo](https://github.com/cloudflare/kumo) 管理后台。设计见 [docs/design.md](docs/design.md)。
 
 技术栈：Hono · Workers · Queues（投递与重试，可关闭）· D1（配置、日志、统计）· Cron（定时消息、补偿、清理）；后台是 React + Kumo 单页应用，由 Vite + `@cloudflare/vite-plugin` 构建为 Workers 静态资源。
@@ -56,7 +58,7 @@ await env.SENDER.send({ topic: 'ops-alert', title: '任务失败', body: '...', 
 
 ```sh
 pnpm install
-cp .dev.vars.example .dev.vars   # 填入 ENCRYPTION_KEY：openssl rand -base64 32
+cp .dev.vars.example .dev.vars   # 填入 ENCRYPTION_KEY 和 ADMIN_PASSWORD，生成方式见文件注释
 pnpm db:migrate:local
 pnpm dev                          # http://localhost:5173/admin（admin / .dev.vars 里的 ADMIN_PASSWORD）
 ```
@@ -73,17 +75,35 @@ pnpm cf-typegen  # 修改 wrangler.jsonc 后重新生成 worker-configuration.d.
 
 ## 部署
 
+### 一键部署
+
+项目尚未发布到 GitHub，顶部按钮中的 `https://github.com/YOUR_USERNAME/cf-sender` 是占位地址。发布为公开仓库后，将它替换为实际仓库地址，按钮即可直接导入本项目。
+
+点击顶部按钮，按以下步骤部署。流程见 [Cloudflare 官方文档](https://developers.cloudflare.com/workers/platform/deploy-buttons/)。
+
+1. 登录 Cloudflare，授权 GitHub 或 GitLab，将项目复制到自己的仓库。
+2. 确认 Worker、D1 和 Queue 的名称，Cloudflare 会根据 `wrangler.jsonc` 创建并绑定资源。
+3. 填写下面两个密钥，再确认部署。
+
+| 密钥 | 填写方式 |
+|---|---|
+| `ADMIN_PASSWORD` | 设置独立的强密码，用于后台登录，默认用户名为 `admin` |
+| `ENCRYPTION_KEY` | 用 `openssl rand -base64 32` 生成，用于加密渠道凭证；妥善保存，更换后已存渠道凭证将无法解密 |
+
+构建和部署命令会从 `package.json` 自动读取，保留默认值即可。部署脚本会运行完整检查、执行尚未应用的 D1 迁移，再发布 Worker。部署成功后打开应用地址的 `/admin`，用 `admin` 和刚设置的 `ADMIN_PASSWORD` 登录，在后台创建渠道、主题和 API Key。API Key 在后台生成，无需作为部署密钥填写。
+
+### 命令行部署
+
 ```sh
 wrangler d1 create cf-sender                    # 把输出的 database_id 填进 wrangler.jsonc
 wrangler queues create cf-sender-deliveries      # 不用队列方式时不需要这两个队列
 wrangler queues create cf-sender-deliveries-dlq
-pnpm db:migrate:remote
 wrangler secret put ENCRYPTION_KEY               # openssl rand -base64 32；丢失后已存渠道凭证无法解密
 wrangler secret put ADMIN_PASSWORD               # 后台 basic 认证密码
-pnpm run deploy
+pnpm run deploy                                # 完整检查、执行 D1 迁移并发布 Worker
 ```
 
-后续更新新增迁移时，也需要先执行 `pnpm db:migrate:remote`，再部署。`deploy` 会先运行完整检查，通过后才发布；GitHub CI 在 push 和 pull request 时运行相同检查，无需部署密钥。
+后续更新时运行 `pnpm run deploy`，脚本会先运行完整检查，再应用新增迁移并发布。GitHub CI 在 push 和 pull request 时运行相同检查，无需部署密钥。
 
 部署后在后台创建渠道、主题和 API Key。
 
