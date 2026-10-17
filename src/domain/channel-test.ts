@@ -15,7 +15,7 @@ export async function testChannel(env: CloudflareBindings, id: string, now = Dat
       messageId: testId,
       channelGroup: null,
       createdAt: now,
-      title: 'cf-sender 测试消息',
+      title: '云吉 Sender 测试消息',
       body: `渠道 **${channel.name}** 配置正确。\n\n发送时间：\`${new Date(now).toISOString()}\``,
       format: 'markdown',
       level: 'info',

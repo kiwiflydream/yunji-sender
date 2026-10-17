@@ -116,14 +116,14 @@ describe('queue consumer', () => {
   it('acks processed messages and retries on infrastructure errors', async () => {
     mockFetch(() => new Response('ok'))
     const { deliveryId } = await queuedDelivery()
-    const batch = createMessageBatch<DeliveryMessage>('cf-sender-deliveries', [
+    const batch = createMessageBatch<DeliveryMessage>('yunji-sender-deliveries', [
       { id: 'm1', timestamp: new Date(), attempts: 1, body: { deliveryId, attempt: 0 } },
     ])
     const ctx = createExecutionContext()
     await worker.queue(batch, env, ctx)
     expect((await getQueueResult(batch, ctx)).explicitAcks).toEqual(['m1'])
 
-    const bad = createMessageBatch<DeliveryMessage>('cf-sender-deliveries', [
+    const bad = createMessageBatch<DeliveryMessage>('yunji-sender-deliveries', [
       { id: 'm2', timestamp: new Date(), attempts: 1, body: { deliveryId: 'x', attempt: 0 } },
     ])
     const brokenEnv = Object.create(env, { DB: { value: { prepare: () => { throw new Error('D1 down') } } } })

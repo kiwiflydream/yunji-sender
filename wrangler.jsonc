@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "cf-sender",
+  "name": "yunji-sender",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-16",
   "observability": {
@@ -17,8 +17,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "cf-sender",
-      // Replace with the id printed by `wrangler d1 create cf-sender` before deploying.
+      "database_name": "yunji-sender",
+      // Replace with the id printed by `wrangler d1 create yunji-sender` before deploying.
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
     }
@@ -29,16 +29,16 @@
     "producers": [
       {
         "binding": "DELIVERY_QUEUE",
-        "queue": "cf-sender-deliveries"
+        "queue": "yunji-sender-deliveries"
       }
     ],
     "consumers": [
       {
-        "queue": "cf-sender-deliveries",
+        "queue": "yunji-sender-deliveries",
         "max_batch_size": 10,
         "max_batch_timeout": 1,
         "max_retries": 3,
-        "dead_letter_queue": "cf-sender-deliveries-dlq"
+        "dead_letter_queue": "yunji-sender-deliveries-dlq"
       }
     ]
   },

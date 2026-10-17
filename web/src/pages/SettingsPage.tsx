@@ -44,7 +44,7 @@ export function SettingsPage() {
             <CodeBlock
               lang="ts"
               code={`// wrangler.jsonc
-"services": [{ "binding": "SENDER", "service": "cf-sender", "entrypoint": "SenderRpc" }]
+"services": [{ "binding": "SENDER", "service": "yunji-sender", "entrypoint": "SenderRpc" }]
 
 // Worker 代码
 await env.SENDER.send(

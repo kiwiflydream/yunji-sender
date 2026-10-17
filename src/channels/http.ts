@@ -108,7 +108,7 @@ export function postJson(url: string, body: unknown, headers: Record<string, str
     url,
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json; charset=utf-8', 'user-agent': 'cf-sender', ...headers },
+      headers: { 'content-type': 'application/json; charset=utf-8', 'user-agent': 'Yunji Sender', ...headers },
       body: JSON.stringify(body),
     },
     check,

@@ -1,6 +1,6 @@
-# cf-sender
+# 云吉 Sender · Yunji Sender
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/YOUR_USERNAME/cf-sender)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/YOUR_USERNAME/yunji-sender)
 
 运行在 Cloudflare 上的多渠道通知网关：一个 API 发消息，按渠道组扇出到 Webhook、Telegram、飞书、企业微信、钉钉、Slack、Discord、Bark、PushPlus、Server酱、Email（Resend）。失败自动退避重试，支持变量消息模板、定时发送、幂等键、投递记录与统计图表，[Kumo](https://github.com/cloudflare/kumo) 管理后台。设计见 [docs/design.md](docs/design.md)。
 
@@ -75,7 +75,7 @@ curl -X POST https://<worker>/api/send \
 
 ```jsonc
 // 调用方的 wrangler.jsonc
-"services": [{ "binding": "SENDER", "service": "cf-sender", "entrypoint": "SenderRpc" }]
+"services": [{ "binding": "SENDER", "service": "yunji-sender", "entrypoint": "SenderRpc" }]
 ```
 
 ```ts
@@ -107,7 +107,7 @@ pnpm cf-typegen  # 修改 wrangler.jsonc 后重新生成 worker-configuration.d.
 
 ### 一键部署
 
-项目尚未发布到 GitHub，顶部按钮中的 `https://github.com/YOUR_USERNAME/cf-sender` 是占位地址。发布为公开仓库后，将它替换为实际仓库地址，按钮即可直接导入本项目。
+项目尚未发布到 GitHub，顶部按钮中的 `https://github.com/YOUR_USERNAME/yunji-sender` 是占位地址。发布为公开仓库后，将它替换为实际仓库地址，按钮即可直接导入本项目。
 
 点击顶部按钮，按以下步骤部署。流程见 [Cloudflare 官方文档](https://developers.cloudflare.com/workers/platform/deploy-buttons/)。
 
@@ -125,9 +125,9 @@ pnpm cf-typegen  # 修改 wrangler.jsonc 后重新生成 worker-configuration.d.
 ### 命令行部署
 
 ```sh
-wrangler d1 create cf-sender                    # 把输出的 database_id 填进 wrangler.jsonc
-wrangler queues create cf-sender-deliveries      # 不用队列方式时不需要这两个队列
-wrangler queues create cf-sender-deliveries-dlq
+wrangler d1 create yunji-sender                    # 把输出的 database_id 填进 wrangler.jsonc
+wrangler queues create yunji-sender-deliveries      # 不用队列方式时不需要这两个队列
+wrangler queues create yunji-sender-deliveries-dlq
 wrangler secret put ENCRYPTION_KEY               # openssl rand -base64 32；丢失后已存渠道凭证无法解密
 wrangler secret put ADMIN_PASSWORD               # 后台 basic 认证密码
 pnpm run deploy                                # 完整检查、执行 D1 迁移并发布 Worker

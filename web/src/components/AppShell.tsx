@@ -25,7 +25,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <Sidebar.Header>
           <div className="flex items-center gap-2 px-2 py-1 group-data-[state=collapsed]/sidebar:w-full group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0">
             <PaperPlaneTiltIcon size={22} weight="duotone" className="shrink-0 text-kumo-brand" />
-            <div className="group-data-[state=collapsed]/sidebar:hidden"><Text bold>cf-sender</Text></div>
+            <div className="group-data-[state=collapsed]/sidebar:hidden"><Text bold>云吉 Sender</Text></div>
           </div>
         </Sidebar.Header>
         <Sidebar.Content>
@@ -59,7 +59,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="min-w-0 flex-1 overflow-y-auto bg-kumo-canvas">
         <div className="flex items-center gap-2 border-b border-kumo-hairline bg-kumo-base px-4 py-2 md:hidden">
           <Sidebar.Trigger />
-          <Text bold>cf-sender</Text>
+          <Text bold>云吉 Sender</Text>
         </div>
         <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-6">{children}</div>
       </main>

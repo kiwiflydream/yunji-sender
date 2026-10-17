@@ -21,7 +21,7 @@ export const webhookProvider: ChannelProvider = {
     )
     const headers: Record<string, string> = {
       'content-type': 'application/json; charset=utf-8',
-      'user-agent': 'cf-sender',
+      'user-agent': 'Yunji Sender',
       // Stable across retries: receivers can deduplicate on it.
       'x-sender-delivery': msg.deliveryId,
     }

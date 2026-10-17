@@ -1,4 +1,4 @@
-# cf-sender 设计
+# 云吉 Sender（Yunji Sender）设计
 
 ## 模型
 

@@ -5,7 +5,7 @@ import type { SendRequest, SendResult } from './shared/types'
 /**
  * Service-binding entrypoint for other Workers (no API key needed):
  *
- *   "services": [{ "binding": "SENDER", "service": "cf-sender", "entrypoint": "SenderRpc" }]
+ *   "services": [{ "binding": "SENDER", "service": "yunji-sender", "entrypoint": "SenderRpc" }]
  *   await env.SENDER.send({ channelGroup: 'ops-alert', title: '...', body: '...' })
  *
  * Validation errors reject with a message listing the invalid fields.

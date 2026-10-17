@@ -59,7 +59,7 @@ export function mockFetch(handler: (req: Request) => Response | Promise<Response
 /** Run a request through the app with a real ExecutionContext and wait for its waitUntil work. */
 export async function request(path: string, init: RequestInit = {}, e: CloudflareBindings = env) {
   const ctx = createExecutionContext()
-  const res = await app.request(`http://cf-sender.test${path}`, init, e, ctx)
+  const res = await app.request(`http://yunji-sender.test${path}`, init, e, ctx)
   await waitOnExecutionContext(ctx)
   return res
 }
@@ -71,7 +71,7 @@ export function adminCall(path: string, init: RequestInit = {}, e: CloudflareBin
     `/admin/api${path}`,
     {
       ...init,
-      headers: { ...ADMIN_AUTH, 'content-type': 'application/json', origin: 'http://cf-sender.test', ...(init.headers as Record<string, string>) },
+      headers: { ...ADMIN_AUTH, 'content-type': 'application/json', origin: 'http://yunji-sender.test', ...(init.headers as Record<string, string>) },
     },
     e,
   )
