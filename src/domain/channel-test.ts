@@ -13,7 +13,7 @@ export async function testChannel(env: CloudflareBindings, id: string, now = Dat
     outcome = await getProvider(channel.type).send(channel.config, {
       deliveryId: testId,
       messageId: testId,
-      topic: null,
+      channelGroup: null,
       createdAt: now,
       title: 'cf-sender 测试消息',
       body: `渠道 **${channel.name}** 配置正确。\n\n发送时间：\`${new Date(now).toISOString()}\``,

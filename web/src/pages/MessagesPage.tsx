@@ -15,7 +15,7 @@ const ALL = '__all__'
 export function MessagesPage() {
   const [filter, setFilter] = useState<MessageFilter>({})
   const [sending, setSending] = useState(false)
-  const topics = useQuery({ queryKey: ['topics'], queryFn: api.topics })
+  const channelGroups = useQuery({ queryKey: ['channelGroups'], queryFn: api.channelGroups })
   const messages = useInfiniteQuery({
     queryKey: ['messages', filter],
     queryFn: ({ pageParam }) => api.messages(filter, pageParam),
@@ -30,7 +30,7 @@ export function MessagesPage() {
     },
   })
   const rows = messages.data?.pages.flatMap((p) => p.messages) ?? []
-  const filtered = !!(filter.status || filter.topic)
+  const filtered = !!(filter.status || filter.channelGroup)
 
   const sendButton = (
     <Button variant="primary" icon={PaperPlaneTiltIcon} onClick={() => setSending(true)}>
@@ -57,14 +57,14 @@ export function MessagesPage() {
           ))}
         </Select>
         <Select
-          aria-label="主题"
+          aria-label="渠道组"
           className="w-48"
-          value={filter.topic ?? ALL}
-          onValueChange={(v) => setFilter((f) => ({ ...f, topic: v === ALL ? undefined : String(v) }))}
-          items={{ [ALL]: '全部主题', ...Object.fromEntries((topics.data ?? []).map((t) => [t.slug, t.slug])) }}
+          value={filter.channelGroup ?? ALL}
+          onValueChange={(v) => setFilter((f) => ({ ...f, channelGroup: v === ALL ? undefined : String(v) }))}
+          items={{ [ALL]: '全部渠道组', ...Object.fromEntries((channelGroups.data ?? []).map((t) => [t.slug, t.slug])) }}
         >
-          <Select.Option value={ALL}>全部主题</Select.Option>
-          {(topics.data ?? []).map((t) => (
+          <Select.Option value={ALL}>全部渠道组</Select.Option>
+          {(channelGroups.data ?? []).map((t) => (
             <Select.Option key={t.id} value={t.slug}>
               {t.slug}
             </Select.Option>
@@ -91,7 +91,7 @@ export function MessagesPage() {
               <Table.Row>
                 <Table.Head>时间</Table.Head>
                 <Table.Head>标题</Table.Head>
-                <Table.Head>主题</Table.Head>
+                <Table.Head>渠道组</Table.Head>
                 <Table.Head className="text-right">送达</Table.Head>
                 <Table.Head>状态</Table.Head>
                 <Table.Head>来源</Table.Head>
@@ -113,7 +113,7 @@ export function MessagesPage() {
                   </Table.Cell>
                   <Table.Cell>
                     <Text size="sm" variant="secondary">
-                      {m.topicSlug ?? '—'}
+                      {m.channelGroupSlug ?? '—'}
                     </Text>
                   </Table.Cell>
                   <Table.Cell className="text-right tabular-nums">

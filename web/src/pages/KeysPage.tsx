@@ -47,7 +47,7 @@ export function KeysPage() {
 
   return (
     <>
-      <PageHeader title="API Key" description="调用 POST /api/send 用的 Bearer Token。可以限定只能发送到指定主题。" actions={addButton} />
+      <PageHeader title="API Key" description="调用 POST /api/send 用的 Bearer Token。可以限定只能发送到指定渠道组。" actions={addButton} />
       {keys.isPending ? (
         <PageLoader />
       ) : keys.isError ? (
@@ -68,7 +68,7 @@ export function KeysPage() {
               <Table.Row>
                 <Table.Head>名称</Table.Head>
                 <Table.Head>Key</Table.Head>
-                <Table.Head>可用主题</Table.Head>
+                <Table.Head>可用渠道组</Table.Head>
                 <Table.Head>最后使用</Table.Head>
                 <Table.Head>创建时间</Table.Head>
                 <Table.Head className="w-24" />
@@ -87,13 +87,13 @@ export function KeysPage() {
                     <span className="font-mono text-sm text-kumo-subtle">{k.prefix}…</span>
                   </Table.Cell>
                   <Table.Cell>
-                    {k.topics === null ? (
+                    {k.channelGroups === null ? (
                       <Text size="sm" variant="secondary">
                         不限（含直接指定渠道）
                       </Text>
                     ) : (
                       <div className="flex flex-wrap gap-1">
-                        {k.topics.map((t) => (
+                        {k.channelGroups.map((t) => (
                           <Badge key={t} variant="secondary">
                             {t}
                           </Badge>
@@ -138,7 +138,7 @@ export function KeysPage() {
 }
 
 function CreateKeyDialog({ onClose }: { onClose: () => void }) {
-  const topics = useQuery({ queryKey: ['topics'], queryFn: api.topics })
+  const channelGroups = useQuery({ queryKey: ['channelGroups'], queryFn: api.channelGroups })
   const [name, setName] = useState('')
   const [restricted, setRestricted] = useState(false)
   const [allowed, setAllowed] = useState<string[]>([])
@@ -174,21 +174,21 @@ function CreateKeyDialog({ onClose }: { onClose: () => void }) {
             noValidate
             onSubmit={(e) => {
               e.preventDefault()
-              if (restricted && allowed.length === 0) return setError('至少选择一个主题')
+              if (restricted && allowed.length === 0) return setError('至少选择一个渠道组')
               create.mutate()
             }}
           >
             <Input label="名称" placeholder="cf-task 告警" value={name} onChange={(e) => setName(e.target.value)} />
-            <Switch label="只允许发送到指定主题" checked={restricted} onCheckedChange={setRestricted} />
+            <Switch label="只允许发送到指定渠道组" checked={restricted} onCheckedChange={setRestricted} />
             {restricted &&
-              (topics.data?.length ? (
-                <Checkbox.Group legend="可用主题" value={allowed} onValueChange={setAllowed}>
-                  {topics.data.map((t) => (
+              (channelGroups.data?.length ? (
+                <Checkbox.Group legend="可用渠道组" value={allowed} onValueChange={setAllowed}>
+                  {channelGroups.data.map((t) => (
                     <Checkbox.Item key={t.id} value={t.slug} label={`${t.name}（${t.slug}）`} />
                   ))}
                 </Checkbox.Group>
               ) : (
-                <Text variant="secondary">还没有主题。</Text>
+                <Text variant="secondary">还没有渠道组。</Text>
               ))}
             {error && <Banner variant="error" size="sm" description={error} />}
             <div className="flex justify-end gap-2">

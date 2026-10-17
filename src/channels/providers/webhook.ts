@@ -9,7 +9,7 @@ export const webhookProvider: ChannelProvider = {
       msg.raw ?? {
         id: msg.messageId,
         deliveryId: msg.deliveryId,
-        topic: msg.topic,
+        channelGroup: msg.channelGroup,
         title: msg.title,
         body: msg.body,
         format: msg.format,

@@ -43,7 +43,7 @@ export function ChannelsPage() {
           <Empty
             icon={<PlugsConnectedIcon size={48} className="text-kumo-inactive" />}
             title="还没有渠道"
-            description="先添加一个渠道，再把它绑定到主题。"
+            description="先添加一个渠道，再把它绑定到渠道组。"
             contents={addButton}
           />
         </LayerCard>
@@ -55,7 +55,7 @@ export function ChannelsPage() {
                 <Table.Head>名称</Table.Head>
                 <Table.Head>类型</Table.Head>
                 <Table.Head>状态</Table.Head>
-                <Table.Head>主题</Table.Head>
+                <Table.Head>渠道组</Table.Head>
                 <Table.Head>更新时间</Table.Head>
                 <Table.Head className="w-24" />
               </Table.Row>
@@ -75,9 +75,9 @@ export function ChannelsPage() {
                     <EnabledBadge enabled={c.enabled} />
                   </Table.Cell>
                   <Table.Cell>
-                    {c.topicSlugs.length ? (
+                    {c.channelGroupSlugs.length ? (
                       <div className="flex flex-wrap gap-1">
-                        {c.topicSlugs.map((s) => (
+                        {c.channelGroupSlugs.map((s) => (
                           <Badge key={s} variant="secondary">
                             {s}
                           </Badge>

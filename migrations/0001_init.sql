@@ -12,7 +12,7 @@ CREATE TABLE channels (
   updated_at INTEGER NOT NULL
 );
 
-CREATE TABLE topics (
+CREATE TABLE channel_groups (
   id TEXT PRIMARY KEY,
   slug TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
@@ -21,32 +21,32 @@ CREATE TABLE topics (
   updated_at INTEGER NOT NULL
 );
 
-CREATE TABLE topic_channels (
-  topic_id TEXT NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+CREATE TABLE channel_group_channels (
+  channel_group_id TEXT NOT NULL REFERENCES channel_groups(id) ON DELETE CASCADE,
   channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
-  PRIMARY KEY (topic_id, channel_id)
+  PRIMARY KEY (channel_group_id, channel_id)
 ) WITHOUT ROWID;
-CREATE INDEX idx_topic_channels_channel ON topic_channels (channel_id);
+CREATE INDEX idx_channel_group_channels_channel ON channel_group_channels (channel_id);
 
 -- Only the SHA-256 of a key is stored; `prefix` identifies it in the UI.
--- `topics` is a JSON array of allowed topic slugs, NULL for unrestricted keys.
+-- `channel_groups` is a JSON array of allowed channelGroup slugs, NULL for unrestricted keys.
 CREATE TABLE api_keys (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   prefix TEXT NOT NULL,
   key_hash TEXT NOT NULL UNIQUE,
-  topics TEXT,
+  channel_groups TEXT,
   last_used_at INTEGER,
   revoked_at INTEGER,
   created_at INTEGER NOT NULL
 );
 
--- One accepted send request. `topic_slug` is a snapshot so logs survive topic
+-- One accepted send request. `channel_group_slug` is a snapshot so logs survive channelGroup
 -- deletion. `idem` is "<scope>:<Idempotency-Key>" where scope is the API key
 -- id, "rpc" or "admin".
 CREATE TABLE messages (
   id TEXT PRIMARY KEY,
-  topic_slug TEXT,
+  channel_group_slug TEXT,
   source TEXT NOT NULL CHECK (source IN ('api', 'rpc', 'admin')),
   api_key_id TEXT,
   idem TEXT,
@@ -70,7 +70,7 @@ CREATE TABLE deliveries (
   channel_id TEXT NOT NULL,
   channel_type TEXT NOT NULL,
   channel_name TEXT NOT NULL,
-  topic_slug TEXT,
+  channel_group_slug TEXT,
   status TEXT NOT NULL CHECK (status IN ('scheduled', 'queued', 'sending', 'sent', 'failed', 'canceled')),
   attempts INTEGER NOT NULL DEFAULT 0,
   next_attempt_at INTEGER NOT NULL,
@@ -94,17 +94,17 @@ CREATE TABLE settings (
   updated_at INTEGER NOT NULL
 );
 
--- Hourly final outcomes per (channel, topic). topic_slug is '' for messages
+-- Hourly final outcomes per (channel, channelGroup). channel_group_slug is '' for messages
 -- sent straight to channels. latency is send_at -> sent (successful only);
 -- retries counts attempts beyond the first.
 CREATE TABLE delivery_stats_hourly (
   hour INTEGER NOT NULL,
   channel_id TEXT NOT NULL,
-  topic_slug TEXT NOT NULL,
+  channel_group_slug TEXT NOT NULL,
   sent INTEGER NOT NULL DEFAULT 0,
   failed INTEGER NOT NULL DEFAULT 0,
   retries INTEGER NOT NULL DEFAULT 0,
   latency_sum INTEGER NOT NULL DEFAULT 0,
   latency_max INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (hour, channel_id, topic_slug)
+  PRIMARY KEY (hour, channel_id, channel_group_slug)
 ) WITHOUT ROWID;

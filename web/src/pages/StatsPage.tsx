@@ -22,7 +22,7 @@ export default function StatsPage() {
     <>
       <PageHeader
         title="统计"
-        description={`各渠道、各主题的投递结果，按小时汇总${me.data ? `，保留 ${me.data.statsRetentionDays} 天` : ''}。`}
+        description={`各渠道、各渠道组的投递结果，按小时汇总${me.data ? `，保留 ${me.data.statsRetentionDays} 天` : ''}。`}
         actions={<RangeTabs value={range} onChange={setRange} />}
       />
       {stats.isPending ? (
@@ -39,7 +39,7 @@ export default function StatsPage() {
           <ResultsChart stats={stats.data} />
           <div className="grid items-start gap-4 lg:grid-cols-2">
             <Breakdown title="按渠道" column="渠道" rows={stats.data.byChannel} empty="暂无数据" />
-            <Breakdown title="按主题" column="主题" rows={stats.data.byTopic} empty="暂无数据" />
+            <Breakdown title="按渠道组" column="渠道组" rows={stats.data.byChannelGroup} empty="暂无数据" />
           </div>
         </div>
       )}

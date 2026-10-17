@@ -10,7 +10,7 @@ export interface DeliveryRow {
   channel_id: string
   channel_type: ChannelType
   channel_name: string
-  topic_slug: string | null
+  channel_group_slug: string | null
   status: DeliveryStatus
   attempts: number
   next_attempt_at: number
@@ -48,7 +48,7 @@ export interface ClaimedDelivery {
   messageId: string
   channelId: string
   channelType: ChannelType
-  topicSlug: string | null
+  channelGroupSlug: string | null
   attempts: number
   content: MessageContent
   sendAt: number
@@ -69,17 +69,17 @@ export async function claimDelivery(
     .prepare(
       `UPDATE deliveries SET status = 'sending', attempts = attempts + 1, lease_until = ?, updated_at = ?
        WHERE id = ? AND attempts = ? AND status IN ('scheduled', 'queued')
-       RETURNING id, message_id, channel_id, channel_type, topic_slug, attempts`,
+       RETURNING id, message_id, channel_id, channel_type, channel_group_slug, attempts`,
     )
     .bind(now + LEASE_MS, now, id, expectedAttempts)
-    .first<Pick<DeliveryRow, 'id' | 'message_id' | 'channel_id' | 'channel_type' | 'topic_slug' | 'attempts'>>()
+    .first<Pick<DeliveryRow, 'id' | 'message_id' | 'channel_id' | 'channel_type' | 'channel_group_slug' | 'attempts'>>()
   if (!row) return null
   return loadClaimed(db, row)
 }
 
 async function loadClaimed(
   db: D1Database,
-  row: Pick<DeliveryRow, 'id' | 'message_id' | 'channel_id' | 'channel_type' | 'topic_slug' | 'attempts'>,
+  row: Pick<DeliveryRow, 'id' | 'message_id' | 'channel_id' | 'channel_type' | 'channel_group_slug' | 'attempts'>,
 ): Promise<ClaimedDelivery | null> {
   const msg = await db
     .prepare('SELECT payload, send_at, created_at FROM messages WHERE id = ?')
@@ -91,7 +91,7 @@ async function loadClaimed(
     messageId: row.message_id,
     channelId: row.channel_id,
     channelType: row.channel_type,
-    topicSlug: row.topic_slug,
+    channelGroupSlug: row.channel_group_slug,
     attempts: row.attempts,
     content: JSON.parse(msg.payload),
     sendAt: msg.send_at,
@@ -103,11 +103,11 @@ async function loadClaimed(
 export async function expiredLeases(db: D1Database, now: number, limit: number): Promise<ClaimedDelivery[]> {
   const { results } = await db
     .prepare(
-      `SELECT id, message_id, channel_id, channel_type, topic_slug, attempts FROM deliveries
+      `SELECT id, message_id, channel_id, channel_type, channel_group_slug, attempts FROM deliveries
        WHERE status = 'sending' AND lease_until < ? LIMIT ?`,
     )
     .bind(now, limit)
-    .all<Pick<DeliveryRow, 'id' | 'message_id' | 'channel_id' | 'channel_type' | 'topic_slug' | 'attempts'>>()
+    .all<Pick<DeliveryRow, 'id' | 'message_id' | 'channel_id' | 'channel_type' | 'channel_group_slug' | 'attempts'>>()
   const claimed = await Promise.all(results.map((r) => loadClaimed(db, r)))
   return claimed.filter((c): c is ClaimedDelivery => c !== null)
 }
@@ -119,7 +119,7 @@ export interface AttemptResult {
   error: string | null
 }
 
-const STATS_UPSERT = `ON CONFLICT (hour, channel_id, topic_slug) DO UPDATE SET
+const STATS_UPSERT = `ON CONFLICT (hour, channel_id, channel_group_slug) DO UPDATE SET
   sent = sent + excluded.sent, failed = failed + excluded.failed, retries = retries + excluded.retries,
   latency_sum = latency_sum + excluded.latency_sum, latency_max = MAX(latency_max, excluded.latency_max)`
 
@@ -131,8 +131,8 @@ const STATS_UPSERT = `ON CONFLICT (hour, channel_id, topic_slug) DO UPDATE SET
 function finalStatsStatement(db: D1Database, id: string, attempts: number, sent: boolean, now: number) {
   return db
     .prepare(
-      `INSERT INTO delivery_stats_hourly (hour, channel_id, topic_slug, sent, failed, retries, latency_sum, latency_max)
-       SELECT m.send_at - m.send_at % ${HOUR_MS}, d.channel_id, COALESCE(d.topic_slug, ''), ?, ?, d.attempts - 1,
+      `INSERT INTO delivery_stats_hourly (hour, channel_id, channel_group_slug, sent, failed, retries, latency_sum, latency_max)
+       SELECT m.send_at - m.send_at % ${HOUR_MS}, d.channel_id, COALESCE(d.channel_group_slug, ''), ?, ?, d.attempts - 1,
          ? * MAX(0, ? - m.send_at), ? * MAX(0, ? - m.send_at)
        FROM deliveries d JOIN messages m ON m.id = d.message_id
        WHERE d.id = ? AND d.status = 'sending' AND d.attempts = ?
@@ -216,8 +216,8 @@ export async function reopenDelivery(
       .prepare(
         `UPDATE delivery_stats_hourly SET failed = failed - 1, retries = MAX(0, retries - (
            SELECT attempts - 1 FROM deliveries WHERE id = ?1))
-         WHERE (hour, channel_id, topic_slug) = (
-           SELECT m.send_at - m.send_at % ${HOUR_MS}, d.channel_id, COALESCE(d.topic_slug, '')
+         WHERE (hour, channel_id, channel_group_slug) = (
+           SELECT m.send_at - m.send_at % ${HOUR_MS}, d.channel_id, COALESCE(d.channel_group_slug, '')
            FROM deliveries d JOIN messages m ON m.id = d.message_id WHERE d.id = ?1 AND d.status = 'failed')
          AND failed > 0`,
       )

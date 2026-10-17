@@ -78,7 +78,7 @@ function ChannelForm({ initial }: { initial?: Channel }) {
     onSuccess: () => {
       toasts.add({ title: '渠道已删除', variant: 'success' })
       qc.invalidateQueries({ queryKey: ['channels'] })
-      qc.invalidateQueries({ queryKey: ['topics'] })
+      qc.invalidateQueries({ queryKey: ['channelGroups'] })
       navigate('/channels')
     },
     onError: (err) => toasts.add({ title: '删除失败', description: errorMessage(err), variant: 'error' }),
@@ -177,7 +177,7 @@ function ChannelForm({ initial }: { initial?: Channel }) {
         open={deleting}
         onOpenChange={setDeleting}
         title="删除渠道"
-        description={`确定删除 ${initial?.name}？它会从所有主题中移除，等待中的投递会失败。`}
+        description={`确定删除 ${initial?.name}？它会从所有渠道组中移除，等待中的投递会失败。`}
         confirmLabel="删除"
         pending={remove.isPending}
         onConfirm={() => remove.mutate()}

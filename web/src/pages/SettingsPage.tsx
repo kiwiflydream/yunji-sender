@@ -36,7 +36,7 @@ export function SettingsPage() {
   -H "Authorization: Bearer cfs_..." \\
   -H "Idempotency-Key: deploy-1234" \\
   -H "Content-Type: application/json" \\
-  -d '{"topic":"ops-alert","title":"部署失败","body":"**api** 回滚到 v1.2","format":"markdown","level":"error"}'`}
+  -d '{"channelGroup":"ops-alert","title":"部署失败","body":"**api** 回滚到 v1.2","format":"markdown","level":"error"}'`}
             />
             <Text size="sm" bold>
               Service Binding（RPC）
@@ -48,7 +48,7 @@ export function SettingsPage() {
 
 // Worker 代码
 await env.SENDER.send(
-  { topic: 'ops-alert', title: '任务失败', body: 'timeout after 25000ms', level: 'error' },
+  { channelGroup: 'ops-alert', title: '任务失败', body: 'timeout after 25000ms', level: 'error' },
   { idempotencyKey: runId },
 )`}
             />
@@ -154,7 +154,7 @@ function RuntimeSettingsForm({ initial }: { initial: AdminMe }) {
               label="队列"
               value="queue"
               disabled={!initial.queueAvailable && mode !== 'queue'}
-              description={initial.queueAvailable ? '秒级重试和 12 小时内的定时发送，需要 Workers Paid' : '当前部署没有配置 Queue'}
+              description={initial.queueAvailable ? '秒级重试和 12 小时内的定时发送；免费套餐也可用' : '当前部署没有配置 Queue'}
             />
             <Radio.Item label="直接发送" value="direct" description="请求内用 waitUntil 发送；重试和定时由每分钟的 Cron 处理" />
           </Radio.Group>

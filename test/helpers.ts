@@ -5,7 +5,7 @@ import { app } from '../src/app'
 import { createApiKey } from '../src/domain/api-keys'
 import { createChannel } from '../src/domain/channels'
 import { putRuntimeSettings } from '../src/domain/settings'
-import { createTopic } from '../src/domain/topics'
+import { createChannelGroup } from '../src/domain/channel-groups'
 import type { DeliveryMessage } from '../src/delivery/mode'
 import { DEFAULT_RUNTIME_SETTINGS, type RuntimeSettings } from '../src/shared/types'
 
@@ -89,10 +89,10 @@ export function webhookChannel(name = 'hook', url = 'https://hooks.test/notify',
   return createChannel(env, { name, type: 'webhook', config: { url, ...extra } })
 }
 
-export async function topicWith(slug: string, channelIds: string[]) {
-  return createTopic(env.DB, { slug, name: slug, channelIds })
+export async function channelGroupWith(slug: string, channelIds: string[]) {
+  return createChannelGroup(env.DB, { slug, name: slug, channelIds })
 }
 
-export async function apiKey(topics: string[] | null = null) {
-  return (await createApiKey(env.DB, { name: 'test', topics })).key
+export async function apiKey(channelGroups: string[] | null = null) {
+  return (await createApiKey(env.DB, { name: 'test', channelGroups })).key
 }

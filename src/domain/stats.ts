@@ -90,7 +90,7 @@ function bucketOf(buckets: number[], t: number): number {
 export interface StatsRow {
   hour: number
   channel_id: string
-  topic_slug: string
+  channel_group_slug: string
   sent: number
   failed: number
   retries: number
@@ -123,14 +123,14 @@ export function buildOverview(
   const total = emptyAgg()
   const buckets = window.buckets.map(() => emptyAgg())
   const byChannel = new Map<string, Agg>()
-  const byTopic = new Map<string, Agg>()
+  const byChannelGroup = new Map<string, Agg>()
   for (const r of rows) {
     if (r.hour < window.from || r.hour > window.to) continue
     const agg = toAgg(r)
     addAgg(total, agg)
     addAgg(buckets[bucketOf(window.buckets, r.hour)], agg)
     addAgg(byChannel.get(r.channel_id) ?? byChannel.set(r.channel_id, emptyAgg()).get(r.channel_id)!, agg)
-    addAgg(byTopic.get(r.topic_slug) ?? byTopic.set(r.topic_slug, emptyAgg()).get(r.topic_slug)!, agg)
+    addAgg(byChannelGroup.get(r.channel_group_slug) ?? byChannelGroup.set(r.channel_group_slug, emptyAgg()).get(r.channel_group_slug)!, agg)
   }
   return {
     range: window.range,
@@ -143,7 +143,7 @@ export function buildOverview(
       const c = channels.get(id)
       return c ? { label: c.name, type: c.type } : { label: `已删除（${id.slice(0, 8)}）` }
     }),
-    byTopic: breakdown(byTopic, (slug) => ({ label: slug || '（直接指定渠道）' })),
+    byChannelGroup: breakdown(byChannelGroup, (slug) => ({ label: slug || '（直接指定渠道）' })),
   }
 }
 

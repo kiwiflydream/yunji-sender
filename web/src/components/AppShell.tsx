@@ -1,5 +1,5 @@
 import { Sidebar, Text } from '@cloudflare/kumo'
-import { ChartBarIcon, GearSixIcon, HashIcon, KeyIcon, PaperPlaneTiltIcon, PlugsConnectedIcon, TrayIcon } from '@phosphor-icons/react'
+import { BookOpenIcon, ChartBarIcon, GearSixIcon, HashIcon, KeyIcon, PaperPlaneTiltIcon, PlugsConnectedIcon, TrayIcon, FileTextIcon } from '@phosphor-icons/react'
 import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useLocation } from 'wouter'
@@ -8,8 +8,10 @@ import { api } from '../api'
 const NAV = [
   { href: '/', label: '消息', icon: TrayIcon, match: (p: string) => p === '/' || p.startsWith('/messages') },
   { href: '/channels', label: '渠道', icon: PlugsConnectedIcon, match: (p: string) => p.startsWith('/channels') },
-  { href: '/topics', label: '主题', icon: HashIcon, match: (p: string) => p.startsWith('/topics') },
+  { href: '/templates', label: '模板', icon: FileTextIcon, match: (p: string) => p.startsWith('/templates') },
+  { href: '/channel-groups', label: '渠道组', icon: HashIcon, match: (p: string) => p.startsWith('/channel-groups') },
   { href: '/keys', label: 'API Key', icon: KeyIcon, match: (p: string) => p.startsWith('/keys') },
+  { href: '/api-docs', label: 'API 文档', icon: BookOpenIcon, match: (p: string) => p === '/api-docs' },
   { href: '/stats', label: '统计', icon: ChartBarIcon, match: (p: string) => p.startsWith('/stats') },
   { href: '/settings', label: '设置', icon: GearSixIcon, match: (p: string) => p.startsWith('/settings') },
 ]
@@ -21,9 +23,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     <Sidebar.Provider defaultOpen collapsible="icon" className="h-svh">
       <Sidebar>
         <Sidebar.Header>
-          <div className="flex items-center gap-2 px-2 py-1">
+          <div className="flex items-center gap-2 px-2 py-1 group-data-[state=collapsed]/sidebar:w-full group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0">
             <PaperPlaneTiltIcon size={22} weight="duotone" className="shrink-0 text-kumo-brand" />
-            <Text bold>cf-sender</Text>
+            <div className="group-data-[state=collapsed]/sidebar:hidden"><Text bold>cf-sender</Text></div>
           </div>
         </Sidebar.Header>
         <Sidebar.Content>
@@ -44,11 +46,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Sidebar.Group>
         </Sidebar.Content>
         <Sidebar.Footer>
-          <div className="flex items-center justify-between gap-2 px-2">
+          <div className="flex min-w-0 w-full items-center justify-between gap-2 px-2 group-data-[state=collapsed]/sidebar:justify-center group-data-[state=collapsed]/sidebar:px-0">
             {me.data && (
-              <Text size="xs" variant="secondary" truncate>
-                {me.data.user}
-              </Text>
+              <div className="min-w-0 group-data-[state=collapsed]/sidebar:hidden">
+                <Text size="xs" variant="secondary" truncate>{me.data.user}</Text>
+              </div>
             )}
             <Sidebar.Trigger />
           </div>

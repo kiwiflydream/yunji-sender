@@ -17,5 +17,5 @@ export function parseOrThrow<T extends z.ZodType>(schema: T, input: unknown): z.
   return parsed.data
 }
 
-/** The caller is authenticated but not allowed to do this (e.g. an API key limited to other topics). */
+/** The caller is authenticated but not allowed to do this (e.g. an API key limited to other channelGroups). */
 export class ForbiddenError extends Error {}

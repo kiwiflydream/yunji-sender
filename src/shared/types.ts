@@ -44,12 +44,12 @@ export interface Channel {
   config: Record<string, ChannelConfigValue>
   /** Secret fields that currently have a value; values are never returned. */
   secretsSet: string[]
-  topicSlugs: string[]
+  channelGroupSlugs: string[]
   createdAt: number
   updatedAt: number
 }
 
-export interface Topic {
+export interface ChannelGroup {
   id: string
   slug: string
   name: string
@@ -59,12 +59,32 @@ export interface Topic {
   updatedAt: number
 }
 
+export type TemplateVariables = Record<string, string | number | boolean>
+
+export interface MessageTemplateInput {
+  id: string
+  name: string
+  description: string
+  title: string
+  body: string
+  format: MessageFormat
+  level: MessageLevel
+  channelGroup: string | null
+  channels: string[]
+}
+
+export interface MessageTemplate extends MessageTemplateInput {
+  variables: string[]
+  createdAt: number
+  updatedAt: number
+}
+
 export interface ApiKeyInfo {
   id: string
   name: string
   prefix: string
-  /** Allowed topic slugs; null means unrestricted (any topic or channel). */
-  topics: string[] | null
+  /** Allowed channelGroup slugs; null means unrestricted (any channelGroup or channel). */
+  channelGroups: string[] | null
   lastUsedAt: number | null
   revokedAt: number | null
   createdAt: number
@@ -87,7 +107,7 @@ export interface DeliveryCounts {
 
 export interface MessageSummary {
   id: string
-  topicSlug: string | null
+  channelGroupSlug: string | null
   source: MessageSource
   apiKeyId: string | null
   title: string
@@ -123,9 +143,12 @@ export interface MessageDetail extends MessageSummary {
 
 /** Body of POST /api/send and the argument of the RPC `send()`. */
 export interface SendRequest {
-  /** Topic slug; its enabled channels receive the message. */
-  topic?: string
-  /** Channel ids, in addition to (or instead of) the topic. */
+  /** With a template, pass variables instead of title/body/content options. */
+  templateId?: string
+  variables?: TemplateVariables
+  /** ChannelGroup slug; its enabled channels receive the message. */
+  channelGroup?: string
+  /** Channel ids, in addition to (or instead of) the channelGroup. */
   channels?: string[]
   title?: string
   body?: string
@@ -210,7 +233,7 @@ export interface StatsPoint {
 }
 
 export interface StatsBreakdownRow {
-  /** Channel id or topic slug ('' = sent straight to channels). */
+  /** Channel id or channelGroup slug ('' = sent straight to channels). */
   key: string
   label: string
   type?: ChannelType
@@ -230,5 +253,5 @@ export interface StatsOverview {
   summary: StatsSummary
   series: StatsPoint[]
   byChannel: StatsBreakdownRow[]
-  byTopic: StatsBreakdownRow[]
+  byChannelGroup: StatsBreakdownRow[]
 }

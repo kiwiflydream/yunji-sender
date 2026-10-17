@@ -10,10 +10,13 @@ import { KeysPage } from './pages/KeysPage'
 import { MessageDetailPage } from './pages/MessageDetailPage'
 import { MessagesPage } from './pages/MessagesPage'
 import { SettingsPage } from './pages/SettingsPage'
-import { TopicsPage } from './pages/TopicsPage'
+import { ChannelGroupsPage } from './pages/ChannelGroupsPage'
+import { TemplatesPage } from './pages/TemplatesPage'
+import { TemplateFormPage } from './pages/TemplateFormPage'
 
 // Charts pull in ECharts; keep them out of the main bundle.
 const StatsPage = lazy(() => import('./pages/StatsPage'))
+const ApiDocsPage = lazy(() => import('./pages/ApiDocsPage'))
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 2_000 } },
@@ -49,8 +52,18 @@ export function App() {
                   <Route path="/channels" component={ChannelsPage} />
                   <Route path="/channels/new">{() => <ChannelFormPage />}</Route>
                   <Route path="/channels/:id">{(p) => <ChannelFormPage id={p.id} />}</Route>
-                  <Route path="/topics" component={TopicsPage} />
+                  <Route path="/channel-groups" component={ChannelGroupsPage} />
+                  <Route path="/templates" component={TemplatesPage} />
+                  <Route path="/templates/new">{() => <TemplateFormPage />}</Route>
+                  <Route path="/templates/:id">{(p) => <TemplateFormPage id={p.id} />}</Route>
                   <Route path="/keys" component={KeysPage} />
+                  <Route path="/api-docs">
+                    {() => (
+                      <Suspense fallback={<PageLoader />}>
+                        <ApiDocsPage />
+                      </Suspense>
+                    )}
+                  </Route>
                   <Route path="/stats">
                     {() => (
                       <Suspense fallback={<PageLoader />}>

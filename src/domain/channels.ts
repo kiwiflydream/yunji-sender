@@ -23,7 +23,7 @@ interface ChannelRow {
   secrets_encrypted: string
   created_at: number
   updated_at: number
-  topic_slugs?: string | null
+  channel_group_slugs?: string | null
 }
 
 function rowToChannel(r: ChannelRow, secrets: Record<string, string>): Channel {
@@ -34,7 +34,7 @@ function rowToChannel(r: ChannelRow, secrets: Record<string, string>): Channel {
     enabled: r.enabled === 1,
     config: JSON.parse(r.config),
     secretsSet: Object.keys(secrets).filter((k) => secrets[k] !== ''),
-    topicSlugs: r.topic_slugs ? r.topic_slugs.split(',').sort() : [],
+    channelGroupSlugs: r.channel_group_slugs ? r.channel_group_slugs.split(',').sort() : [],
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   }
@@ -127,8 +127,8 @@ export function parseChannelConfig(
   return { config, secrets }
 }
 
-const SELECT = `SELECT c.*, (SELECT group_concat(t.slug) FROM topic_channels tc JOIN topics t ON t.id = tc.topic_id
-  WHERE tc.channel_id = c.id) AS topic_slugs FROM channels c`
+const SELECT = `SELECT c.*, (SELECT group_concat(t.slug) FROM channel_group_channels tc JOIN channel_groups t ON t.id = tc.channel_group_id
+  WHERE tc.channel_id = c.id) AS channel_group_slugs FROM channels c`
 
 export async function listChannels(env: CloudflareBindings): Promise<Channel[]> {
   const { results } = await env.DB.prepare(`${SELECT} ORDER BY c.created_at`).all<ChannelRow>()
@@ -196,7 +196,7 @@ export async function updateChannel(env: CloudflareBindings, id: string, raw: un
   return getChannel(env, id)
 }
 
-/** Topic bindings go with it (FK cascade); past deliveries keep a name snapshot. */
+/** ChannelGroup bindings go with it (FK cascade); past deliveries keep a name snapshot. */
 export async function deleteChannel(env: CloudflareBindings, id: string): Promise<boolean> {
   const res = await env.DB.prepare('DELETE FROM channels WHERE id = ?').bind(id).run()
   return res.meta.changes > 0

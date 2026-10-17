@@ -21,6 +21,7 @@ import {
 import type { ApiCaller } from './api-keys'
 import { ForbiddenError, parseOrThrow, ValidationError } from './errors'
 import { getRuntimeSettings } from './settings'
+import { expandTemplateRequest } from './templates'
 
 export const BODY_LIMIT = 16 * 1024
 const RAW_LIMIT = 32 * 1024
@@ -36,7 +37,7 @@ const isHttpUrl = (v: string) => {
 
 export const sendInputSchema = z
   .object({
-    topic: z.string().trim().min(1).max(64).optional(),
+    channelGroup: z.string().trim().min(1).max(64).optional(),
     channels: z.array(z.string().trim().min(1)).max(50).optional(),
     title: z.string().trim().max(256).default(''),
     body: z.string().max(BODY_LIMIT).default(''),
@@ -50,15 +51,15 @@ export const sendInputSchema = z
     raw: z.partialRecord(z.enum(CHANNEL_TYPES), z.record(z.string(), z.unknown())).default({}),
     /** Epoch ms or an ISO 8601 string; omitted or in the past means now. */
     sendAt: z.union([z.number().int().positive(), z.string().trim().min(1)]).optional(),
-  })
+  }).strict()
   .refine((v) => v.title !== '' || v.body.trim() !== '', { path: ['body'], message: 'title 和 body 至少填一个' })
-  .refine((v) => !!v.topic || (v.channels?.length ?? 0) > 0, { path: ['topic'], message: '需要 topic 或 channels' })
+  .refine((v) => !!v.channelGroup || (v.channels?.length ?? 0) > 0, { path: ['channelGroup'], message: '需要 channelGroup 或 channels' })
   .refine((v) => JSON.stringify(v.raw).length <= RAW_LIMIT, { path: ['raw'], message: 'raw 不能超过 32 KB' })
 
 
 export interface SendOptions {
   source: MessageSource
-  /** API callers are subject to their key's topic restriction. */
+  /** API callers are subject to their key's channelGroup restriction. */
   caller?: ApiCaller
   idempotencyKey?: string | null
   waitUntil: WaitUntil
@@ -80,15 +81,15 @@ interface Target {
   enabled: number
 }
 
-async function resolveTargets(db: D1Database, topic: string | undefined, channelIds: string[]): Promise<Target[]> {
+async function resolveTargets(db: D1Database, channelGroup: string | undefined, channelIds: string[]): Promise<Target[]> {
   const targets = new Map<string, Target>()
-  if (topic) {
-    const row = await db.prepare('SELECT id FROM topics WHERE slug = ?').bind(topic).first<{ id: string }>()
-    if (!row) throw new ValidationError([{ path: 'topic', message: `主题不存在：${topic}` }])
+  if (channelGroup) {
+    const row = await db.prepare('SELECT id FROM channel_groups WHERE slug = ?').bind(channelGroup).first<{ id: string }>()
+    if (!row) throw new ValidationError([{ path: 'channelGroup', message: `渠道组不存在：${channelGroup}` }])
     const { results } = await db
       .prepare(
-        `SELECT c.id, c.name, c.type, c.enabled FROM topic_channels tc JOIN channels c ON c.id = tc.channel_id
-         WHERE tc.topic_id = ? AND c.enabled = 1 ORDER BY c.name`,
+        `SELECT c.id, c.name, c.type, c.enabled FROM channel_group_channels tc JOIN channels c ON c.id = tc.channel_id
+         WHERE tc.channel_group_id = ? AND c.enabled = 1 ORDER BY c.name`,
       )
       .bind(row.id)
       .all<Target>()
@@ -138,15 +139,6 @@ async function sendResultOf(db: D1Database, messageId: string, duplicate: boolea
  */
 export async function sendMessage(env: CloudflareBindings, raw: unknown, opts: SendOptions): Promise<SendResult> {
   const now = opts.now ?? Date.now()
-  const input = parseOrThrow(sendInputSchema, raw)
-  const channelIds = [...new Set(input.channels ?? [])]
-  if (opts.caller?.topics) {
-    if (channelIds.length) throw new ForbiddenError('此 API Key 只能按主题发送')
-    if (!input.topic || !opts.caller.topics.includes(input.topic)) {
-      throw new ForbiddenError(`此 API Key 不能发送到主题 ${input.topic ?? ''}`.trim())
-    }
-  }
-
   const key = opts.idempotencyKey?.trim()
   if (key !== undefined && (key === '' || key.length > 255)) {
     throw new ValidationError([{ path: 'Idempotency-Key', message: '长度必须在 1 到 255 之间' }])
@@ -157,10 +149,20 @@ export async function sendMessage(env: CloudflareBindings, raw: unknown, opts: S
     if (existing) return (await sendResultOf(env.DB, existing.id, true))!
   }
 
+  // An accepted request must remain repeatable even if its template changes or is deleted.
+  const input = parseOrThrow(sendInputSchema, await expandTemplateRequest(env.DB, raw))
+  const channelIds = [...new Set(input.channels ?? [])]
+  if (opts.caller?.channelGroups) {
+    if (channelIds.length) throw new ForbiddenError('此 API Key 只能按渠道组发送')
+    if (!input.channelGroup || !opts.caller.channelGroups.includes(input.channelGroup)) {
+      throw new ForbiddenError(`此 API Key 不能发送到渠道组 ${input.channelGroup ?? ''}`.trim())
+    }
+  }
+
   const sendAt = resolveSendAt(input.sendAt, now)
-  const targets = await resolveTargets(env.DB, input.topic, channelIds)
+  const targets = await resolveTargets(env.DB, input.channelGroup, channelIds)
   if (targets.length === 0) {
-    throw new ValidationError([{ path: 'topic', message: '没有可用的渠道：主题没有绑定渠道，或绑定的渠道都已停用' }])
+    throw new ValidationError([{ path: 'channelGroup', message: '没有可用的渠道：渠道组没有绑定渠道，或绑定的渠道都已停用' }])
   }
   const settings = await getRuntimeSettings(env.DB)
   const mode = await effectiveMode(env, settings)
@@ -179,24 +181,24 @@ export async function sendMessage(env: CloudflareBindings, raw: unknown, opts: S
     raw: input.raw,
   }
   const messageId = crypto.randomUUID()
-  const topic = input.topic ?? null
+  const channelGroup = input.channelGroup ?? null
   const deliveries = targets.map((t) => ({ ...t, deliveryId: crypto.randomUUID() }))
   try {
     await env.DB.batch([
       env.DB
         .prepare(
-          `INSERT INTO messages (id, topic_slug, source, api_key_id, idem, payload, send_at, created_at)
+          `INSERT INTO messages (id, channel_group_slug, source, api_key_id, idem, payload, send_at, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(messageId, topic, opts.source, opts.caller?.id ?? null, idem, JSON.stringify(content), sendAt, now),
+        .bind(messageId, channelGroup, opts.source, opts.caller?.id ?? null, idem, JSON.stringify(content), sendAt, now),
       ...deliveries.map((d) =>
         env.DB
           .prepare(
-            `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, topic_slug, status,
+            `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, channel_group_slug, status,
                next_attempt_at, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
-          .bind(d.deliveryId, messageId, d.id, d.type, d.name, topic, status, sendAt, now, now),
+          .bind(d.deliveryId, messageId, d.id, d.type, d.name, channelGroup, status, sendAt, now, now),
       ),
     ])
   } catch (err) {
@@ -224,7 +226,7 @@ export async function sendMessage(env: CloudflareBindings, raw: unknown, opts: S
 
 interface MessageRow {
   id: string
-  topic_slug: string | null
+  channel_group_slug: string | null
   source: MessageSource
   api_key_id: string | null
   title: string
@@ -265,7 +267,7 @@ const DELIVERY_COUNTS = `COUNT(d.id) AS total,
   COALESCE(SUM(d.status IN ('scheduled', 'queued', 'sending')), 0) AS pending,
   COALESCE(SUM(d.status = 'scheduled'), 0) AS scheduled`
 
-const AGGREGATE = `SELECT m.id, m.topic_slug, m.source, m.api_key_id, m.send_at, m.created_at,
+const AGGREGATE = `SELECT m.id, m.channel_group_slug, m.source, m.api_key_id, m.send_at, m.created_at,
   json_extract(m.payload, '$.title') AS title, json_extract(m.payload, '$.level') AS level,
   ${DELIVERY_COUNTS}`
 
@@ -280,7 +282,7 @@ function rowToSummary(r: MessageRow, now: number): MessageSummary {
   }
   return {
     id: r.id,
-    topicSlug: r.topic_slug,
+    channelGroupSlug: r.channel_group_slug,
     source: r.source,
     apiKeyId: r.api_key_id,
     title: r.title ?? '',
@@ -299,9 +301,9 @@ export const listQuerySchema = z.object({
   // New cursors include the id to break timestamp ties; accept old timestamps too.
   before: z.string().max(128).regex(/^[1-9]\d*(?::[A-Za-z0-9-]+)?$/)
     .refine((v) => Number.isSafeInteger(Number(v.split(':')[0])), '无效的分页游标').optional(),
-  topic: z.string().trim().min(1).optional(),
+  channelGroup: z.string().trim().min(1).optional(),
   status: z.enum(MESSAGE_STATUSES).optional(),
-})
+}).strict()
 
 export async function listMessages(
   db: D1Database,
@@ -320,9 +322,9 @@ export async function listMessages(
       params.push(Number(at))
     }
   }
-  if (q.topic) {
-    where.push('m.topic_slug = ?')
-    params.push(q.topic)
+  if (q.channelGroup) {
+    where.push('m.channel_group_slug = ?')
+    params.push(q.channelGroup)
   }
   if (q.status) {
     // Probe each candidate via the message_id index while walking messages in

@@ -7,12 +7,12 @@ async function seedMessage(
   id: string,
   createdAt: number,
   statuses: DeliveryStatus[] = ['sent'],
-  topic = 'ops',
+  channelGroup = 'ops',
   sendAt = createdAt,
 ) {
   await env.DB.batch([
-    env.DB.prepare(`INSERT INTO messages (id, source, topic_slug, payload, send_at, created_at) VALUES (?, 'admin', ?, ?, ?, ?)`)
-      .bind(id, topic, JSON.stringify({ title: id, level: 'info' }), sendAt, createdAt),
+    env.DB.prepare(`INSERT INTO messages (id, source, channel_group_slug, payload, send_at, created_at) VALUES (?, 'admin', ?, ?, ?, ?)`)
+      .bind(id, channelGroup, JSON.stringify({ title: id, level: 'info' }), sendAt, createdAt),
     ...statuses.map((status, i) => env.DB.prepare(
       `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, status, next_attempt_at, created_at, updated_at)
        VALUES (?, ?, ?, 'webhook', 'hook', ?, ?, ?, ?)`,
@@ -48,11 +48,11 @@ describe('message pagination', () => {
     expect(second.nextBefore).toBeNull()
   })
 
-  it('keeps legacy timestamp cursors working and applies topic filters before the limit', async () => {
+  it('keeps legacy timestamp cursors working and applies channelGroup filters before the limit', async () => {
     await seedMessage('other', 3000, ['sent'], 'biz')
     await seedMessage('newer', 2000)
     await seedMessage('older', 1000)
-    expect((await list('topic=ops&limit=1')).messages.map((m) => m.id)).toEqual(['newer'])
+    expect((await list('channelGroup=ops&limit=1')).messages.map((m) => m.id)).toEqual(['newer'])
     expect((await list('before=2000')).messages.map((m) => m.id)).toEqual(['older'])
   })
 

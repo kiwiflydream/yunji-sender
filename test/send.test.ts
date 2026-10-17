@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { updateChannel } from '../src/domain/channels'
 import { QUEUE_MAX_DELAY_S } from '../src/delivery/mode'
 import { SenderRpc } from '../src/rpc'
-import { adminCall, apiCall, apiKey, envWithQueue, mockFetch, setSettings, topicWith, webhookChannel } from './helpers'
+import { adminCall, apiCall, apiKey, envWithQueue, mockFetch, setSettings, channelGroupWith, webhookChannel } from './helpers'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -26,28 +26,37 @@ describe('POST /api/send auth', () => {
     expect((await apiCall(key, '/send', post({}), q.env)).status).toBe(401)
   })
 
-  it('limits restricted keys to their topics', async () => {
+  it('limits restricted keys to their channelGroups', async () => {
     const q = envWithQueue()
     const ch = await webhookChannel()
-    await topicWith('ops', [ch.id])
-    await topicWith('biz', [ch.id])
+    await channelGroupWith('ops', [ch.id])
+    await channelGroupWith('biz', [ch.id])
     const key = await apiKey(['ops'])
-    expect((await apiCall(key, '/send', post({ topic: 'ops', body: 'x' }), q.env)).status).toBe(202)
-    expect((await apiCall(key, '/send', post({ topic: 'biz', body: 'x' }), q.env)).status).toBe(403)
+    expect((await apiCall(key, '/send', post({ channelGroup: 'ops', body: 'x' }), q.env)).status).toBe(202)
+    expect((await apiCall(key, '/send', post({ channelGroup: 'biz', body: 'x' }), q.env)).status).toBe(403)
     expect((await apiCall(key, '/send', post({ channels: [ch.id], body: 'x' }), q.env)).status).toBe(403)
   })
 })
 
 describe('fan-out', () => {
+  it('rejects an unrecognized target field even alongside valid channels', async () => {
+    const q = envWithQueue()
+    const channel = await webhookChannel()
+    const key = await apiKey()
+    expect((await apiCall(key, '/send', post({ channels: [channel.id], topic: 'ops', body: 'x' }), q.env)).status).toBe(422)
+    expect(q.sent).toEqual([])
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM messages').first()).toEqual({ n: 0 })
+  })
+
   it('creates one delivery per enabled channel and enqueues them', async () => {
     const q = envWithQueue()
     const a = await webhookChannel('a')
     const b = await webhookChannel('b')
     const off = await webhookChannel('off')
     await updateChannel(env, off.id, { name: 'off', type: 'webhook', enabled: false, config: {} })
-    await topicWith('ops', [a.id, b.id, off.id])
+    await channelGroupWith('ops', [a.id, b.id, off.id])
     const key = await apiKey()
-    const res = await apiCall(key, '/send', post({ topic: 'ops', channels: [a.id], title: '部署完成', body: 'v1.2' }), q.env)
+    const res = await apiCall(key, '/send', post({ channelGroup: 'ops', channels: [a.id], title: '部署完成', body: 'v1.2' }), q.env)
     expect(res.status).toBe(202)
     const result = (await res.json()) as any
     expect(result.duplicate).toBe(false)
@@ -59,24 +68,24 @@ describe('fan-out', () => {
     expect(q.sent.every((s) => s.delaySeconds === 0)).toBe(true)
 
     const detail = (await (await apiCall(key, `/messages/${result.messageId}`)).json()) as any
-    expect(detail.message).toMatchObject({ topicSlug: 'ops', source: 'api', title: '部署完成', status: 'pending' })
+    expect(detail.message).toMatchObject({ channelGroupSlug: 'ops', source: 'api', title: '部署完成', status: 'pending' })
     expect(detail.message.content).toMatchObject({ body: 'v1.2', format: 'text', level: 'info', url: null, tags: [] })
   })
 
-  it('rejects unknown topics, unknown or disabled channels, and empty topics', async () => {
+  it('rejects unknown channelGroups, unknown or disabled channels, and empty channelGroups', async () => {
     const q = envWithQueue()
     const key = await apiKey()
     const off = await webhookChannel('off')
     await updateChannel(env, off.id, { name: 'off', type: 'webhook', enabled: false, config: {} })
-    await topicWith('empty', [off.id])
+    await channelGroupWith('empty', [off.id])
     const issue = async (body: unknown) => ((await (await apiCall(key, '/send', post(body), q.env)).json()) as any).issues[0]
-    expect(await issue({ topic: 'nope', body: 'x' })).toMatchObject({ path: 'topic' })
+    expect(await issue({ channelGroup: 'nope', body: 'x' })).toMatchObject({ path: 'channelGroup' })
     expect(await issue({ channels: ['nope'], body: 'x' })).toMatchObject({ path: 'channels' })
     expect(await issue({ channels: [off.id], body: 'x' })).toMatchObject({ path: 'channels', message: expect.stringContaining('已停用') })
-    expect(await issue({ topic: 'empty', body: 'x' })).toMatchObject({ path: 'topic', message: expect.stringContaining('没有可用的渠道') })
-    expect(await issue({ topic: 'empty' })).toMatchObject({ path: 'body' })
-    expect(await issue({ body: 'x' })).toMatchObject({ path: 'topic' })
-    expect(await issue({ topic: 'empty', body: 'x', url: 'javascript:1' })).toMatchObject({ path: 'url' })
+    expect(await issue({ channelGroup: 'empty', body: 'x' })).toMatchObject({ path: 'channelGroup', message: expect.stringContaining('没有可用的渠道') })
+    expect(await issue({ channelGroup: 'empty' })).toMatchObject({ path: 'body' })
+    expect(await issue({ body: 'x' })).toMatchObject({ path: 'channelGroup' })
+    expect(await issue({ channelGroup: 'empty', body: 'x', url: 'javascript:1' })).toMatchObject({ path: 'url' })
     expect(q.sent).toEqual([])
   })
 })
@@ -172,16 +181,16 @@ describe('RPC entrypoint', () => {
   it('sends without an API key and honors idempotency', async () => {
     const q = envWithQueue()
     const ch = await webhookChannel()
-    await topicWith('ops', [ch.id])
+    await channelGroupWith('ops', [ch.id])
     const ctx = createExecutionContext()
     const rpc = new SenderRpc(ctx, q.env)
-    const r1 = await rpc.send({ topic: 'ops', title: '任务失败', body: 'boom', level: 'error' }, { idempotencyKey: 'run-1' })
-    const r2 = await rpc.send({ topic: 'ops', title: '任务失败', body: 'boom', level: 'error' }, { idempotencyKey: 'run-1' })
+    const r1 = await rpc.send({ channelGroup: 'ops', title: '任务失败', body: 'boom', level: 'error' }, { idempotencyKey: 'run-1' })
+    const r2 = await rpc.send({ channelGroup: 'ops', title: '任务失败', body: 'boom', level: 'error' }, { idempotencyKey: 'run-1' })
     await waitOnExecutionContext(ctx)
     expect(r1.deliveries).toHaveLength(1)
     expect(r2).toMatchObject({ messageId: r1.messageId, duplicate: true })
     const row = await env.DB.prepare('SELECT source, idem FROM messages').first()
     expect(row).toEqual({ source: 'rpc', idem: 'rpc:run-1' })
-    await expect(rpc.send({ topic: 'nope', body: 'x' })).rejects.toThrow(/topic/)
+    await expect(rpc.send({ channelGroup: 'nope', body: 'x' })).rejects.toThrow(/channelGroup/)
   })
 })

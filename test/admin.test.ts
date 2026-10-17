@@ -8,6 +8,19 @@ afterEach(() => vi.restoreAllMocks())
 const json = (body: unknown) => ({ body: JSON.stringify(body) })
 
 describe('admin auth', () => {
+  it('returns JSON 404 for removed or unknown admin API routes', async () => {
+    const response = await adminCall('/topics')
+    expect(response.status).toBe(404)
+    expect(await response.json()).toEqual({ error: 'not_found' })
+    expect((await adminCall('/channel-groups')).status).toBe(200)
+  })
+
+  it('does not silently drop an unrecognized API key scope field', async () => {
+    const res = await adminCall('/keys', { method: 'POST', ...json({ name: 'restricted', topics: ['ops'] }) })
+    expect(res.status).toBe(422)
+    expect(await env.DB.prepare('SELECT COUNT(*) AS n FROM api_keys').first()).toEqual({ n: 0 })
+  })
+
   it('requires basic auth and blocks cross-site writes', async () => {
     expect((await request('/admin/api/channels')).status).toBe(401)
     expect((await adminCall('/channels')).status).toBe(200)
@@ -90,36 +103,36 @@ describe('channels', () => {
   })
 })
 
-describe('topics', () => {
+describe('channelGroups', () => {
   it('binds channels, enforces unique slugs, and drops bindings with the channel', async () => {
     const a = await webhookChannel('a')
     const b = await webhookChannel('b')
-    const res = await adminCall('/topics', { method: 'POST', ...json({ slug: 'ops-alert', name: '运维告警', channelIds: [a.id, b.id, a.id] }) })
+    const res = await adminCall('/channel-groups', { method: 'POST', ...json({ slug: 'ops-alert', name: '运维告警', channelIds: [a.id, b.id, a.id] }) })
     expect(res.status).toBe(201)
-    const { topic } = (await res.json()) as any
-    expect(topic.channelIds.sort()).toEqual([a.id, b.id].sort())
+    const { channelGroup } = (await res.json()) as any
+    expect(channelGroup.channelIds.sort()).toEqual([a.id, b.id].sort())
 
-    const dup = await adminCall('/topics', { method: 'POST', ...json({ slug: 'ops-alert', name: 'x' }) })
+    const dup = await adminCall('/channel-groups', { method: 'POST', ...json({ slug: 'ops-alert', name: 'x' }) })
     expect(((await dup.json()) as any).issues[0].path).toBe('slug')
-    const bad = await adminCall('/topics', { method: 'POST', ...json({ slug: 'Bad Slug', name: 'x' }) })
+    const bad = await adminCall('/channel-groups', { method: 'POST', ...json({ slug: 'Bad Slug', name: 'x' }) })
     expect(bad.status).toBe(422)
-    const unknown = await adminCall('/topics', { method: 'POST', ...json({ slug: 'x', name: 'x', channelIds: ['nope'] }) })
+    const unknown = await adminCall('/channel-groups', { method: 'POST', ...json({ slug: 'x', name: 'x', channelIds: ['nope'] }) })
     expect(((await unknown.json()) as any).issues[0].path).toBe('channelIds')
 
     await adminCall(`/channels/${a.id}`, { method: 'DELETE' })
-    const after = (await (await adminCall(`/topics/${topic.id}`)).json()) as any
-    expect(after.topic.channelIds).toEqual([b.id])
+    const after = (await (await adminCall(`/channel-groups/${channelGroup.id}`)).json()) as any
+    expect(after.channelGroup.channelIds).toEqual([b.id])
     const chB = (await (await adminCall(`/channels/${b.id}`)).json()) as any
-    expect(chB.channel.topicSlugs).toEqual(['ops-alert'])
+    expect(chB.channel.channelGroupSlugs).toEqual(['ops-alert'])
   })
 })
 
 describe('api keys', () => {
   it('shows the key once, stores only a hash, and revokes', async () => {
-    const res = await adminCall('/keys', { method: 'POST', ...json({ name: 'ci', topics: ['ops'] }) })
+    const res = await adminCall('/keys', { method: 'POST', ...json({ name: 'ci', channelGroups: ['ops'] }) })
     const { key, info } = (await res.json()) as any
     expect(key).toMatch(/^cfs_/)
-    expect(info).toMatchObject({ name: 'ci', topics: ['ops'], prefix: key.slice(0, 10), revokedAt: null })
+    expect(info).toMatchObject({ name: 'ci', channelGroups: ['ops'], prefix: key.slice(0, 10), revokedAt: null })
     expect(await (await adminCall('/keys')).text()).not.toContain(key)
     expect((await adminCall(`/keys/${info.id}/revoke`, { method: 'POST' })).status).toBe(204)
     const list = (await (await adminCall('/keys')).json()) as any
@@ -150,14 +163,14 @@ describe('settings', () => {
 })
 
 describe('stats', () => {
-  it('aggregates outcomes by channel and topic', async () => {
+  it('aggregates outcomes by channel and channelGroup', async () => {
     const ch = await webhookChannel('hook')
     const now = Date.now()
     await env.DB.prepare(
-      `INSERT INTO messages (id, topic_slug, source, payload, send_at, created_at) VALUES ('m1', 'ops', 'admin', '{}', ?, ?)`,
+      `INSERT INTO messages (id, channel_group_slug, source, payload, send_at, created_at) VALUES ('m1', 'ops', 'admin', '{}', ?, ?)`,
     ).bind(now - 5000, now - 5000).run()
     await env.DB.prepare(
-      `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, topic_slug, status, next_attempt_at, created_at, updated_at)
+      `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, channel_group_slug, status, next_attempt_at, created_at, updated_at)
        VALUES ('d1', 'm1', ?, 'webhook', 'hook', 'ops', 'queued', ?, ?, ?), ('d2', 'm1', ?, 'webhook', 'hook', 'ops', 'queued', ?, ?, ?)`,
     ).bind(ch.id, now, now, now, ch.id, now, now, now).run()
     for (const [id, status] of [['d1', 'sent'], ['d2', 'failed']] as const) {
@@ -168,6 +181,6 @@ describe('stats', () => {
     expect(stats.summary).toMatchObject({ total: 2, sent: 1, failed: 1, successRate: 0.5, retries: 0, latencyAvg: 5000 })
     expect(stats.series).toHaveLength(24)
     expect(stats.byChannel).toEqual([expect.objectContaining({ key: ch.id, label: 'hook', type: 'webhook', total: 2 })])
-    expect(stats.byTopic).toEqual([expect.objectContaining({ key: 'ops', total: 2, failed: 1 })])
+    expect(stats.byChannelGroup).toEqual([expect.objectContaining({ key: 'ops', total: 2, failed: 1 })])
   })
 })

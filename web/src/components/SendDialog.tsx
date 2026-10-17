@@ -6,6 +6,7 @@ import {
   Input,
   InputArea,
   Select,
+  Switch,
   TagInput,
   Tabs,
   Text,
@@ -15,17 +16,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useLocation } from 'wouter'
 import { zonedTimeToEpoch } from '../../../src/lib/time'
-import type { MessageFormat, MessageLevel, SendRequest } from '../../../src/shared/types'
+import type { MessageFormat, MessageLevel, SendRequest, TemplateVariables } from '../../../src/shared/types'
 import { api, ApiError, errorMessage } from '../api'
 import { LEVEL, viewerTimezone } from '../lib/format'
+import { TemplatePreview } from './TemplatePreview'
 
-type Target = 'topic' | 'channels'
+type Target = 'channelGroup' | 'channels'
 
 export function SendDialog({ onClose }: { onClose: () => void }) {
-  const topics = useQuery({ queryKey: ['topics'], queryFn: api.topics })
+  const [mode, setMode] = useState<'custom' | 'template'>('custom')
+  const templates = useQuery({ queryKey: ['templates'], queryFn: api.templates, enabled: mode === 'template' })
+  const [templateId, setTemplateId] = useState('')
+  const [variables, setVariables] = useState<TemplateVariables>({})
+  const [useDefaults, setUseDefaults] = useState(true)
+  const channelGroups = useQuery({ queryKey: ['channelGroups'], queryFn: api.channelGroups })
   const channels = useQuery({ queryKey: ['channels'], queryFn: api.channels })
-  const [target, setTarget] = useState<Target>('topic')
-  const [topic, setTopic] = useState('')
+  const [target, setTarget] = useState<Target>('channelGroup')
+  const [channelGroup, setChannelGroup] = useState('')
   const [channelIds, setChannelIds] = useState<string[]>([])
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -42,9 +49,11 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
 
   const send = useMutation({
     mutationFn: () => {
-      const input: SendRequest = { title, body, format, level, url: url || null, tags }
-      if (target === 'topic') input.topic = topic
-      else input.channels = channelIds
+      const input: SendRequest = mode === 'template' ? { templateId, variables } : { title, body, format, level, url: url || null, tags }
+      if (mode === 'custom' || !useDefaults || !hasDefaults) {
+        if (target === 'channelGroup') input.channelGroup = channelGroup
+        else input.channels = channelIds
+      }
       if (sendAt) input.sendAt = zonedTimeToEpoch(sendAt, viewerTimezone) ?? sendAt
       return api.send(input)
     },
@@ -63,6 +72,8 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
   })
 
   const enabledChannels = channels.data?.filter((c) => c.enabled) ?? []
+  const selectedTemplate = templates.data?.find((t) => t.id === templateId)
+  const hasDefaults = !!(selectedTemplate?.channelGroup || selectedTemplate?.channels.length)
   const err = (path: string) => (errors[path] ? { error: errors[path] } : {})
 
   return (
@@ -77,25 +88,52 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
             send.mutate()
           }}
         >
+          <Tabs variant="segmented" value={mode} onValueChange={(v) => { setMode(v as 'custom' | 'template'); setErrors({}); setError(null) }}
+            tabs={[{ value: 'custom', label: '自定义消息' }, { value: 'template', label: '使用模板' }]} />
+          {mode === 'template' && (
+            <>
+              {templates.isError && <Banner variant="error" description={errorMessage(templates.error)} />}
+              <Select label="消息模板" placeholder={templates.isPending ? '正在加载模板…' : templates.data?.length ? '选择模板' : '还没有模板'}
+                value={templateId || null} items={Object.fromEntries((templates.data ?? []).map((t) => [t.id, t.name]))}
+                onValueChange={(v) => { setTemplateId(String(v ?? '')); setVariables({}); setUseDefaults(true); setTarget('channels'); setErrors({}); setError(null) }} error={errors.templateId}>
+                {(templates.data ?? []).map((t) => <Select.Option key={t.id} value={t.id}>{t.name}</Select.Option>)}
+              </Select>
+              {selectedTemplate && <TemplatePreview content={selectedTemplate} values={variables} onChange={(next) => {
+                setVariables(next)
+                setErrors((previous) => {
+                  const remaining = { ...previous }
+                  for (const key of Object.keys(next)) if (next[key] !== variables[key]) delete remaining[`variables.${key}`]
+                  delete remaining.title
+                  delete remaining.body
+                  return remaining
+                })
+              }} errors={errors} />}
+              {hasDefaults && (
+                <Switch label="使用模板默认发送目标" checked={useDefaults} onCheckedChange={setUseDefaults} />
+              )}
+              {hasDefaults && useDefaults && <Text size="sm" variant="secondary">发送到模板预设的{selectedTemplate?.channelGroup ? `渠道组 ${selectedTemplate.channelGroup}` : ''}{selectedTemplate?.channelGroup && selectedTemplate.channels.length ? ' 和 ' : ''}{selectedTemplate?.channels.length ? `${selectedTemplate.channels.length} 个渠道` : ''}。</Text>}
+            </>
+          )}
+          {(mode === 'custom' || (selectedTemplate && (!useDefaults || !hasDefaults))) && <>
           <Tabs
             variant="segmented"
             value={target}
             onValueChange={(v) => setTarget(v as Target)}
             tabs={[
-              { value: 'topic', label: '按主题' },
+              { value: 'channelGroup', label: '按渠道组' },
               { value: 'channels', label: '指定渠道' },
             ]}
           />
-          {target === 'topic' ? (
+          {target === 'channelGroup' ? (
             <Select
-              label="主题"
-              placeholder={topics.data?.length === 0 ? '还没有主题' : '选择主题'}
-              value={topic || null}
-              onValueChange={(v) => setTopic(String(v ?? ''))}
-              items={Object.fromEntries((topics.data ?? []).map((t) => [t.slug, `${t.name}（${t.slug}）`]))}
-              {...err('topic')}
+              label="渠道组"
+              placeholder={channelGroups.data?.length === 0 ? '还没有渠道组' : '选择渠道组'}
+              value={channelGroup || null}
+              onValueChange={(v) => setChannelGroup(String(v ?? ''))}
+              items={Object.fromEntries((channelGroups.data ?? []).map((t) => [t.slug, `${t.name}（${t.slug}）`]))}
+              {...err('channelGroup')}
             >
-              {(topics.data ?? []).map((t) => (
+              {(channelGroups.data ?? []).map((t) => (
                 <Select.Option key={t.id} value={t.slug}>
                   {t.name}（{t.slug}）
                 </Select.Option>
@@ -110,6 +148,11 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
               ))}
             </Checkbox.Group>
           )}
+          </>}
+          {mode === 'template' && errors.channels && <Banner variant="error" description={errors.channels} />}
+          {mode === 'template' && errors.channelGroup && <Banner variant="error" description={errors.channelGroup} />}
+          {mode === 'template' && (errors.title || errors.body) && <Banner variant="error" description={errors.title || errors.body} />}
+          {mode === 'custom' && <>
           <Input label="标题" value={title} onChange={(e) => setTitle(e.target.value)} {...err('title')} />
           <InputArea label="正文" rows={4} value={body} onChange={(e) => setBody(e.target.value)} {...err('body')} />
           <div className="grid gap-4 sm:grid-cols-2">
@@ -142,6 +185,7 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
             <Input label="链接（可选）" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} {...err('url')} />
             <TagInput label="标签（可选）" value={tags} onValueChange={setTags} maxValues={10} />
           </div>
+          </>}
           <Input
             label="定时发送（可选）"
             type="datetime-local"
@@ -153,7 +197,7 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
           {(error || errors.other) && <Banner variant="error" size="sm" description={error ?? errors.other} />}
           <div className="flex justify-end gap-2">
             <Dialog.Close render={(p) => <Button {...p}>取消</Button>} />
-            <Button type="submit" variant="primary" loading={send.isPending}>
+            <Button type="submit" variant="primary" loading={send.isPending} disabled={mode === 'template' && !selectedTemplate}>
               发送
             </Button>
           </div>

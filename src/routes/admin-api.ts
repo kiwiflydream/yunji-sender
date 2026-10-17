@@ -7,7 +7,8 @@ import { parseOrThrow, ValidationError } from '../domain/errors'
 import { cancelMessage, getMessage, listMessages, listQuerySchema, retryDelivery, sendMessage } from '../domain/messages'
 import { getRuntimeSettings, putRuntimeSettings, runtimeSettingsSchema } from '../domain/settings'
 import { statsOverview, statsWindow, STATS_RANGES } from '../domain/stats'
-import { createTopic, deleteTopic, getTopic, listTopics, updateTopic } from '../domain/topics'
+import { createChannelGroup, deleteChannelGroup, getChannelGroup, listChannelGroups, updateChannelGroup } from '../domain/channel-groups'
+import { deleteTemplate, getTemplate, listTemplates, saveTemplate } from '../domain/templates'
 import { hasDeliveryQueue } from '../delivery/mode'
 import { isValidTimezone } from '../lib/time'
 import { handleError, jsonBody, waitUntilOf } from './errors'
@@ -41,19 +42,34 @@ adminApi.post('/channels/:id/test', async (c) => {
   return result ? c.json({ result }) : c.json({ error: 'not_found' }, 404)
 })
 
-// Topics
-adminApi.get('/topics', async (c) => c.json({ topics: await listTopics(c.env.DB) }))
-adminApi.post('/topics', async (c) => c.json({ topic: await createTopic(c.env.DB, await jsonBody(c.req.raw)) }, 201))
-adminApi.get('/topics/:id', async (c) => {
-  const topic = await getTopic(c.env.DB, c.req.param('id'))
-  return topic ? c.json({ topic }) : c.json({ error: 'not_found' }, 404)
+// ChannelGroups
+adminApi.get('/channel-groups', async (c) => c.json({ channelGroups: await listChannelGroups(c.env.DB) }))
+adminApi.post('/channel-groups', async (c) => c.json({ channelGroup: await createChannelGroup(c.env.DB, await jsonBody(c.req.raw)) }, 201))
+adminApi.get('/channel-groups/:id', async (c) => {
+  const channelGroup = await getChannelGroup(c.env.DB, c.req.param('id'))
+  return channelGroup ? c.json({ channelGroup }) : c.json({ error: 'not_found' }, 404)
 })
-adminApi.put('/topics/:id', async (c) => {
-  const topic = await updateTopic(c.env.DB, c.req.param('id'), await jsonBody(c.req.raw))
-  return topic ? c.json({ topic }) : c.json({ error: 'not_found' }, 404)
+adminApi.put('/channel-groups/:id', async (c) => {
+  const channelGroup = await updateChannelGroup(c.env.DB, c.req.param('id'), await jsonBody(c.req.raw))
+  return channelGroup ? c.json({ channelGroup }) : c.json({ error: 'not_found' }, 404)
 })
-adminApi.delete('/topics/:id', async (c) =>
-  (await deleteTopic(c.env.DB, c.req.param('id'))) ? c.body(null, 204) : c.json({ error: 'not_found' }, 404),
+adminApi.delete('/channel-groups/:id', async (c) =>
+  (await deleteChannelGroup(c.env.DB, c.req.param('id'))) ? c.body(null, 204) : c.json({ error: 'not_found' }, 404),
+)
+
+// Message templates
+adminApi.get('/templates', async (c) => c.json({ templates: await listTemplates(c.env.DB) }))
+adminApi.post('/templates', async (c) => c.json({ template: await saveTemplate(c.env.DB, await jsonBody(c.req.raw)) }, 201))
+adminApi.get('/templates/:id', async (c) => {
+  const template = await getTemplate(c.env.DB, c.req.param('id'))
+  return template ? c.json({ template }) : c.json({ error: 'not_found' }, 404)
+})
+adminApi.put('/templates/:id', async (c) => {
+  const template = await saveTemplate(c.env.DB, await jsonBody(c.req.raw), c.req.param('id'))
+  return template ? c.json({ template }) : c.json({ error: 'not_found' }, 404)
+})
+adminApi.delete('/templates/:id', async (c) =>
+  (await deleteTemplate(c.env.DB, c.req.param('id'))) ? c.body(null, 204) : c.json({ error: 'not_found' }, 404),
 )
 
 // API keys

@@ -29,6 +29,7 @@ admin.get('/api/me', async (c) => {
   })
 })
 admin.route('/api', adminApi)
+admin.all('/api/*', (c) => c.json({ error: 'not_found' }, 404))
 
 // Any other /admin path is a client-side route: serve the SPA shell.
 admin.get('*', secureHeaders(), async (c) => {

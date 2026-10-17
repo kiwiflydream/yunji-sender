@@ -11,7 +11,7 @@ afterEach(() => vi.restoreAllMocks())
 const msg = (overrides: Partial<OutboundMessage> = {}): OutboundMessage => ({
   deliveryId: 'dlv-1',
   messageId: 'msg-1',
-  topic: 'ops',
+  channelGroup: 'ops',
   createdAt: Date.UTC(2026, 9, 17),
   title: '磁盘告警',
   body: '使用率 **95%**',
@@ -35,7 +35,7 @@ describe('webhook', () => {
     expect(call.method).toBe('PUT')
     expect(call.headers.get('x-token')).toBe('abc')
     expect(call.headers.get('x-sender-delivery')).toBe('dlv-1')
-    expect(call.json()).toMatchObject({ id: 'msg-1', topic: 'ops', title: '磁盘告警', level: 'error', tags: ['prod'] })
+    expect(call.json()).toMatchObject({ id: 'msg-1', channelGroup: 'ops', title: '磁盘告警', level: 'error', tags: ['prod'] })
     const ts = call.headers.get('x-sender-timestamp')!
     const expected = toHex(await hmacSha256('shh', `${ts}.${call.body}`))
     expect(call.headers.get('x-sender-signature')).toBe(`sha256=${expected}`)

@@ -167,7 +167,7 @@ export const CHANNEL_CATALOG: Record<ChannelType, ChannelTypeInfo> = {
         options: ['wechat', 'app', 'extension', 'webhook', 'cp', 'mail', 'qq', 'clawbot', 'cmcc', 'sms', 'voice'],
         help: '默认 wechat（微信公众号）；sms 和 voice 在 PushPlus 按量计费。',
       },
-      { key: 'topic', label: '群组编码（可选）', kind: 'text', help: 'PushPlus 的群组编码，留空发送给自己；与本系统的主题独立。' },
+      { key: 'topic', label: '群组编码（可选）', kind: 'text', help: 'PushPlus 的群组编码，留空发送给自己；与本系统的渠道组独立。' },
       { key: 'option', label: '渠道配置编码（可选）', kind: 'text', help: '在 PushPlus 配置的渠道编码，供 webhook、cp、mail、qq 等渠道使用。' },
       { key: 'to', label: '指定接收人（可选）', kind: 'text', secret: true, help: '好友令牌或企业微信用户 ID，多人用逗号分隔。' },
     ],

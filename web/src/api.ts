@@ -9,12 +9,14 @@ import type {
   MessageDetail,
   MessageStatus,
   MessageSummary,
+  MessageTemplate,
+  MessageTemplateInput,
   RuntimeSettings,
   SendRequest,
   SendResult,
   StatsOverview,
   StatsRange,
-  Topic,
+  ChannelGroup,
 } from '../../src/shared/types'
 import { viewerTimezone } from './lib/format'
 
@@ -58,7 +60,7 @@ export interface ChannelInput {
   config: Record<string, ChannelConfigValue>
 }
 
-export interface TopicInput {
+export interface ChannelGroupInput {
   slug: string
   name: string
   description: string
@@ -67,7 +69,7 @@ export interface TopicInput {
 
 export interface MessageFilter {
   status?: MessageStatus
-  topic?: string
+  channelGroup?: string
 }
 
 export const api = {
@@ -79,13 +81,18 @@ export const api = {
     request<{ channel: Channel }>(`/channels/${id}`, json('PUT', input)).then((r) => r.channel),
   deleteChannel: (id: string) => request<void>(`/channels/${id}`, json('DELETE')),
   testChannel: (id: string) => request<{ result: ChannelTestResult }>(`/channels/${id}/test`, json('POST')).then((r) => r.result),
-  topics: () => request<{ topics: Topic[] }>('/topics').then((r) => r.topics),
-  createTopic: (input: TopicInput) => request<{ topic: Topic }>('/topics', json('POST', input)).then((r) => r.topic),
-  updateTopic: (id: string, input: TopicInput) => request<{ topic: Topic }>(`/topics/${id}`, json('PUT', input)).then((r) => r.topic),
-  deleteTopic: (id: string) => request<void>(`/topics/${id}`, json('DELETE')),
+  channelGroups: () => request<{ channelGroups: ChannelGroup[] }>('/channel-groups').then((r) => r.channelGroups),
+  templates: () => request<{ templates: MessageTemplate[] }>('/templates').then((r) => r.templates),
+  template: (id: string) => request<{ template: MessageTemplate }>(`/templates/${id}`).then((r) => r.template),
+  createTemplate: (input: MessageTemplateInput) => request<{ template: MessageTemplate }>('/templates', json('POST', input)).then((r) => r.template),
+  updateTemplate: (input: MessageTemplateInput) => request<{ template: MessageTemplate }>(`/templates/${input.id}`, json('PUT', input)).then((r) => r.template),
+  deleteTemplate: (id: string) => request<void>(`/templates/${id}`, json('DELETE')),
+  createChannelGroup: (input: ChannelGroupInput) => request<{ channelGroup: ChannelGroup }>('/channel-groups', json('POST', input)).then((r) => r.channelGroup),
+  updateChannelGroup: (id: string, input: ChannelGroupInput) => request<{ channelGroup: ChannelGroup }>(`/channel-groups/${id}`, json('PUT', input)).then((r) => r.channelGroup),
+  deleteChannelGroup: (id: string) => request<void>(`/channel-groups/${id}`, json('DELETE')),
   keys: () => request<{ keys: ApiKeyInfo[] }>('/keys').then((r) => r.keys),
-  createKey: (name: string, topics: string[] | null) =>
-    request<{ key: string; info: ApiKeyInfo }>('/keys', json('POST', { name, topics })),
+  createKey: (name: string, channelGroups: string[] | null) =>
+    request<{ key: string; info: ApiKeyInfo }>('/keys', json('POST', { name, channelGroups })),
   revokeKey: (id: string) => request<void>(`/keys/${id}/revoke`, json('POST')),
   deleteKey: (id: string) => request<void>(`/keys/${id}`, json('DELETE')),
   send: (input: SendRequest) => request<SendResult>('/send', json('POST', input)),
@@ -93,7 +100,7 @@ export const api = {
     const q = new URLSearchParams({ limit: '50' })
     if (before) q.set('before', String(before))
     if (filter.status) q.set('status', filter.status)
-    if (filter.topic) q.set('topic', filter.topic)
+    if (filter.channelGroup) q.set('channelGroup', filter.channelGroup)
     return request<{ messages: MessageSummary[]; nextBefore: string | null }>(`/messages?${q}`)
   },
   message: (id: string) => request<{ message: MessageDetail }>(`/messages/${id}`).then((r) => r.message),

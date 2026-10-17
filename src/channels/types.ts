@@ -4,7 +4,7 @@ import type { ChannelConfigValue, ChannelType, MessageContent } from '../shared/
 export interface OutboundMessage extends Omit<MessageContent, 'raw'> {
   deliveryId: string
   messageId: string
-  topic: string | null
+  channelGroup: string | null
   createdAt: number
   raw: Record<string, unknown> | null
 }

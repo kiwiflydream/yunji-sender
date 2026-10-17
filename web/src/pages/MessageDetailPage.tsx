@@ -170,7 +170,7 @@ export function MessageDetailPage({ id }: { id: string }) {
               <DescriptionList
                 items={[
                   ['ID', <span className="font-mono text-xs">{m.id}</span>],
-                  ['主题', m.topicSlug ?? '—'],
+                  ['渠道组', m.channelGroupSlug ?? '—'],
                   ['来源', SOURCE[m.source]],
                   ['格式', m.content.format === 'markdown' ? 'Markdown' : '纯文本'],
                   ['发送时间', fmtTime(m.sendAt)],

@@ -38,7 +38,7 @@ export async function attemptDelivery(env: CloudflareBindings, d: ClaimedDeliver
     raw: d.content.raw?.[channel.type] ?? null,
     deliveryId: d.id,
     messageId: d.messageId,
-    topic: d.topicSlug,
+    channelGroup: d.channelGroupSlug,
     createdAt: d.createdAt,
   }
   let outcome: SendOutcome

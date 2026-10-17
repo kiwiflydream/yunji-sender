@@ -5,12 +5,12 @@ import type { OutboundMessage } from '../src/channels/types'
 import { processDelivery } from '../src/delivery/process'
 import { createChannel } from '../src/domain/channels'
 import { getMessage, sendMessage } from '../src/domain/messages'
-import { adminCall, envWithQueue, mockFetch, topicWith } from './helpers'
+import { adminCall, envWithQueue, mockFetch, channelGroupWith } from './helpers'
 
 afterEach(() => vi.restoreAllMocks())
 
 const message = (overrides: Partial<OutboundMessage> = {}): OutboundMessage => ({
-  deliveryId: 'd1', messageId: 'm1', topic: 'ops', createdAt: Date.now(),
+  deliveryId: 'd1', messageId: 'm1', channelGroup: 'ops', createdAt: Date.now(),
   title: '磁盘告警', body: '使用率 **95%**', format: 'markdown', level: 'error',
   url: 'https://status.test', tags: ['prod', 'disk'], raw: null, ...overrides,
 })
@@ -143,11 +143,11 @@ it.each(['invalid', 'sctpkey', 'sctp123t', 'SCTkey/../other', 'SCTkey?query', 's
   expect(res.status).toBe(422)
 })
 
-it('fans one topic out to both providers through the delivery state machine', async () => {
+it('fans one channelGroup out to both providers through the delivery state machine', async () => {
   const created = await Promise.all(channels.map(({ type, config }) => createChannel(env, { name: type, type, config })))
-  await topicWith('ops', created.map((c) => c.id))
+  await channelGroupWith('ops', created.map((c) => c.id))
   const q = envWithQueue()
-  const result = await sendMessage(q.env, { topic: 'ops', title: '通知', body: '**ready**', format: 'markdown', raw: { pushplus: { content: 'raw pushplus' } } }, { source: 'admin', waitUntil: () => {} })
+  const result = await sendMessage(q.env, { channelGroup: 'ops', title: '通知', body: '**ready**', format: 'markdown', raw: { pushplus: { content: 'raw pushplus' } } }, { source: 'admin', waitUntil: () => {} })
   expect(q.sent).toHaveLength(2)
   const calls = mockFetch((req) => Response.json(req.url.includes('pushplus') ? { code: 200 } : { code: 0 }))
   for (const sent of q.sent) await processDelivery(q.env, sent.body)
