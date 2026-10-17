@@ -1,0 +1,3 @@
+# openssl rand -base64 32 — encrypts channel credentials; losing it makes saved channels unreadable.
+ENCRYPTION_KEY=
+ADMIN_PASSWORD=change-me

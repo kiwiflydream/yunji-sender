@@ -1,0 +1,57 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cf-sender",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-16",
+  "observability": {
+    "enabled": true
+  },
+  // The admin SPA (built by Vite into dist/client). Routes the Worker owns run
+  // first, so /admin only serves the HTML shell after admin auth; everything
+  // else (hashed bundles, Vite dev modules) is served as static assets.
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/", "/health", "/api/*", "/admin", "/admin/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cf-sender",
+      // Replace with the id printed by `wrangler d1 create cf-sender` before deploying.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Remove this section (and run `pnpm cf-typegen`) to deploy without Queues;
+  // deliveries then run in waitUntil and retries are picked up by the cron.
+  "queues": {
+    "producers": [
+      {
+        "binding": "DELIVERY_QUEUE",
+        "queue": "cf-sender-deliveries"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "cf-sender-deliveries",
+        "max_batch_size": 10,
+        "max_batch_timeout": 1,
+        "max_retries": 3,
+        "dead_letter_queue": "cf-sender-deliveries-dlq"
+      }
+    ]
+  },
+  "triggers": {
+    // Dispatch scheduled deliveries and retries, recover lost ones, purge old logs.
+    "crons": ["* * * * *"]
+  },
+  "vars": {
+    // Admin UI auth: "basic" (ADMIN_USERNAME + ADMIN_PASSWORD secret) or "access" (Cloudflare Access).
+    "ADMIN_AUTH_MODE": "basic",
+    "ADMIN_USERNAME": "admin",
+    // Only used when ADMIN_AUTH_MODE is "access".
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": ""
+  }
+}
