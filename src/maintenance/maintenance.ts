@@ -82,10 +82,10 @@ export async function runMaintenance(
   const revived = await env.DB
     .prepare(
       `UPDATE deliveries SET status = 'scheduled', updated_at = ?
-       WHERE id IN (SELECT id FROM deliveries WHERE status = 'queued' AND MAX(next_attempt_at, COALESCE(last_dispatched_at, updated_at)) < ? LIMIT ?)`,
+       WHERE id IN (SELECT id FROM deliveries WHERE status = 'queued' AND MAX(next_attempt_at, COALESCE(last_dispatched_at, updated_at)) < ? LIMIT ?) RETURNING id`,
     )
     .bind(now, now - STALE_QUEUED_MS, SCAN_LIMIT)
-    .run()
+    .all()
 
   const leases = await expiredLeases(env.DB, now, EXPIRED_LEASE_LIMIT)
   for (const d of leases) {
@@ -101,7 +101,7 @@ export async function runMaintenance(
   const { purgedMessages, purgedStats } = await purge(env.DB, settings, now)
   const report = {
     dispatched,
-    revived: revived.meta.changes,
+    revived: revived.results.length,
     expiredLeases: leases.length,
     purgedMessages,
     purgedStats,

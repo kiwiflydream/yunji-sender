@@ -241,9 +241,11 @@ export async function reopenDelivery(
 /** Terminal failures for exhausted dispatches or expired deadlines, counted once. */
 export async function expirePending(db: D1Database, now: number, limit: number): Promise<void> {
   const { results } = await db.prepare(`SELECT id FROM deliveries
-    WHERE status IN ('scheduled', 'queued') AND
-      (deadline_at <= ? OR (status = 'scheduled' AND dispatch_count >= ${MAX_DISPATCHES}))
-    LIMIT ?`).bind(now, limit).all<{ id: string }>()
+    WHERE status IN ('scheduled', 'queued') AND deadline_at <= ?1
+    UNION ALL
+    SELECT id FROM deliveries WHERE status = 'scheduled' AND dispatch_count >= ${MAX_DISPATCHES}
+      AND deadline_at > ?1
+    LIMIT ?2`).bind(now, limit).all<{ id: string }>()
   if (!results.length) return
   const ids = JSON.stringify(results.map((d) => d.id))
   const predicate = `d.id IN (SELECT value FROM json_each(?1)) AND d.status IN ('scheduled', 'queued')

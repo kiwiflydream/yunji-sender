@@ -52,12 +52,27 @@ CREATE TABLE messages (
   idem TEXT,
   payload TEXT NOT NULL,
   delivery_count INTEGER NOT NULL DEFAULT 0,
+  total_count INTEGER NOT NULL DEFAULT 0,
+  sent_count INTEGER NOT NULL DEFAULT 0,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  pending_count INTEGER NOT NULL DEFAULT 0,
+  scheduled_count INTEGER NOT NULL DEFAULT 0,
+  -- Time-independent state. Future-only scheduled/pending is resolved at read time.
+  delivery_state TEXT GENERATED ALWAYS AS (CASE
+    WHEN pending_count > 0 THEN CASE WHEN pending_count = scheduled_count THEN 'scheduled' ELSE 'pending' END
+    WHEN sent_count = total_count THEN 'sent'
+    WHEN sent_count > 0 THEN 'partial'
+    WHEN failed_count > 0 THEN 'failed'
+    ELSE 'canceled' END) STORED,
   send_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 ) WITHOUT ROWID;
 CREATE UNIQUE INDEX idx_messages_idem ON messages (idem) WHERE idem IS NOT NULL;
 CREATE INDEX idx_messages_cursor ON messages (created_at DESC, id DESC);
 CREATE INDEX idx_messages_channel_group_cursor ON messages (channel_group_slug, created_at DESC, id DESC);
+CREATE INDEX idx_messages_state_cursor ON messages (delivery_state, created_at DESC, id DESC);
+CREATE INDEX idx_messages_group_state_cursor ON messages (channel_group_slug, delivery_state, created_at DESC, id DESC);
+
 
 -- One message to one channel. Status machine:
 --   scheduled  waiting in D1 until next_attempt_at; the cron dispatches it
@@ -104,6 +119,8 @@ CREATE INDEX idx_deliveries_sending ON deliveries (lease_until)
 
 CREATE INDEX idx_deliveries_deadline ON deliveries (deadline_at)
   WHERE status IN ('scheduled', 'queued');
+CREATE INDEX idx_deliveries_exhausted ON deliveries (deadline_at)
+  WHERE status = 'scheduled' AND dispatch_count >= 12;
 
 CREATE TABLE settings (
   key TEXT PRIMARY KEY,
@@ -153,6 +170,14 @@ CREATE TABLE usage_counters (
   used INTEGER NOT NULL,
   PRIMARY KEY (kind, scope, bucket)
 ) WITHOUT ROWID;
+CREATE INDEX idx_usage_counters_bucket ON usage_counters (bucket);
+
+-- Reopening terminal work consumes a pending slot in the same transaction as
+-- restoring the delivery and withdrawing its old failure statistics.
+CREATE TRIGGER guard_reopened_capacity BEFORE UPDATE OF status ON deliveries
+WHEN OLD.status IN ('failed','canceled') AND NEW.status IN ('scheduled','queued','sending') BEGIN
+  SELECT CASE WHEN (SELECT COUNT(*) FROM (SELECT 1 FROM deliveries WHERE status IN ('scheduled','queued','sending') LIMIT COALESCE((SELECT json_extract(value, '$.maxPendingDeliveries') FROM settings WHERE key='runtime'), 1000))) >= COALESCE((SELECT json_extract(value, '$.maxPendingDeliveries') FROM settings WHERE key='runtime'), 1000) THEN RAISE(ABORT, 'safety:backlog') END;
+END;
 
 CREATE TRIGGER reserve_message_budget BEFORE INSERT ON messages WHEN NEW.delivery_count > 0 BEGIN
   SELECT CASE WHEN COALESCE((SELECT json_extract(value, '$.sendingPaused') FROM settings WHERE key='runtime'), 0) THEN RAISE(ABORT, 'safety:paused') END;
@@ -183,4 +208,30 @@ CREATE TRIGGER reserve_attempt_budget BEFORE UPDATE OF attempts ON deliveries WH
   INSERT INTO usage_counters (kind, scope, bucket, used) VALUES
     ('work', '*', NEW.updated_at - NEW.updated_at % 86400000, 1)
     ON CONFLICT (kind, scope, bucket) DO UPDATE SET used = used + excluded.used;
+END;
+
+-- Incremental counters keep status filtering indexed and transactional.
+CREATE TRIGGER insert_message_delivery_counts AFTER INSERT ON deliveries BEGIN
+  UPDATE messages SET total_count = total_count + 1,
+    sent_count = sent_count + (NEW.status = 'sent'),
+    failed_count = failed_count + (NEW.status = 'failed'),
+    pending_count = pending_count + (NEW.status IN ('scheduled','queued','sending')),
+    scheduled_count = scheduled_count + (NEW.status = 'scheduled')
+  WHERE id = NEW.message_id;
+END;
+CREATE TRIGGER delete_message_delivery_counts AFTER DELETE ON deliveries BEGIN
+  UPDATE messages SET total_count = total_count - 1,
+    sent_count = sent_count - (OLD.status = 'sent'),
+    failed_count = failed_count - (OLD.status = 'failed'),
+    pending_count = pending_count - (OLD.status IN ('scheduled','queued','sending')),
+    scheduled_count = scheduled_count - (OLD.status = 'scheduled')
+  WHERE id = OLD.message_id;
+END;
+CREATE TRIGGER update_message_delivery_counts AFTER UPDATE OF status ON deliveries
+WHEN OLD.status <> NEW.status BEGIN
+  UPDATE messages SET sent_count = sent_count + (NEW.status = 'sent') - (OLD.status = 'sent'),
+    failed_count = failed_count + (NEW.status = 'failed') - (OLD.status = 'failed'),
+    pending_count = pending_count + (NEW.status IN ('scheduled','queued','sending')) - (OLD.status IN ('scheduled','queued','sending')),
+    scheduled_count = scheduled_count + (NEW.status = 'scheduled') - (OLD.status = 'scheduled')
+  WHERE id = NEW.message_id;
 END;

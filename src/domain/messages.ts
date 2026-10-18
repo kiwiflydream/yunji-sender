@@ -245,16 +245,6 @@ export function messageStatus(c: DeliveryCounts, sendAt: number, now: number): M
   return 'canceled'
 }
 
-/** SQL twin of messageStatus, for filtering (bind `now` once). */
-const STATUS_HAVING: Record<MessageStatus, string> = {
-  scheduled: 'pending > 0 AND pending = scheduled AND m.send_at > ?',
-  pending: 'pending > 0 AND NOT (pending = scheduled AND m.send_at > ?)',
-  sent: 'pending = 0 AND sent = total AND ? IS NOT NULL',
-  partial: 'pending = 0 AND sent > 0 AND sent < total AND ? IS NOT NULL',
-  failed: 'pending = 0 AND sent = 0 AND failed > 0 AND ? IS NOT NULL',
-  canceled: 'pending = 0 AND sent = 0 AND failed = 0 AND ? IS NOT NULL',
-}
-
 const DELIVERY_COUNTS = `COUNT(d.id) AS total,
   COALESCE(SUM(d.status = 'sent'), 0) AS sent,
   COALESCE(SUM(d.status = 'failed'), 0) AS failed,
@@ -316,19 +306,26 @@ export async function listMessages(
     where.push('m.channel_group_slug = ?')
     params.push(q.channelGroup)
   }
-  if (q.status) {
-    // Probe each candidate via the message_id index while walking messages in
-    // cursor order. Apply status before LIMIT so sparse matches fill the page.
-    where.push(`EXISTS (
-      SELECT ${DELIVERY_COUNTS} FROM deliveries d WHERE d.message_id = m.id
-      HAVING ${STATUS_HAVING[q.status]}
-    )`)
+  if (q.status === 'pending') {
+    // Only active state buckets are searched; completed history is excluded by index.
+    where.push("m.delivery_state IN ('pending','scheduled') AND (m.delivery_state = 'pending' OR m.send_at <= ?)")
     params.push(now)
+  } else if (q.status) {
+    where.push('m.delivery_state = ?')
+    params.push(q.status)
+    if (q.status === 'scheduled') {
+      where.push('m.send_at > ?')
+      params.push(now)
+    }
   }
+  // With two active states (pending + due scheduled), SQLite may prefer the
+  // group's time index for ORDER BY and scan its entire completed history.
+  const statusIndex = q.status
+    ? `INDEXED BY ${q.channelGroup ? 'idx_messages_group_state_cursor' : 'idx_messages_state_cursor'}` : ''
   const { results } = await db
     .prepare(
       `WITH page AS (
-         SELECT m.* FROM messages m ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+         SELECT m.* FROM messages m ${statusIndex} ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
          ORDER BY m.created_at DESC, m.id DESC LIMIT ?
        )
        ${AGGREGATE} FROM page m LEFT JOIN deliveries d ON d.message_id = m.id
@@ -359,11 +356,12 @@ export async function cancelMessage(db: D1Database, id: string, now = Date.now()
   const res = await db
     .prepare(
       `UPDATE deliveries SET status = 'canceled', finished_at = ?, updated_at = ?
-       WHERE message_id = ? AND status IN ('scheduled', 'queued')`,
+       WHERE message_id = ? AND status IN ('scheduled', 'queued') RETURNING id`,
     )
     .bind(now, now, id)
-    .run()
-  return res.meta.changes
+    .all()
+  // Trigger writes to message counters must not inflate the canceled count.
+  return res.results.length
 }
 
 /** Give a failed or canceled delivery one more attempt now. */
