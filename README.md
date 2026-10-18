@@ -4,6 +4,8 @@
 
 部署在 Cloudflare 上的多渠道通知网关。
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/kiwiflydream/yunji-sender)
+
 业务系统只需调用一个 API，即可把订单通知、部署结果或服务告警发送到多个渠道。接收人、消息模板和失败重试在后台统一管理，无需在每个项目中分别接入通知服务，也无需维护常驻服务器。
 
 [快速部署](#快速部署) · [发送第一条消息](#发送第一条消息) · [接入指南](docs/usage.md) · [本地开发](docs/development.md)
@@ -132,6 +134,10 @@ curl "$SENDER_BASE_URL/api/send" \
 首次提交返回 `202` 和 `messageId`，表示消息已受理。使用同一 API Key 和幂等键重试会返回原消息；发送新事件时应换一个键。投递结果可在后台查看，也可通过 `GET /api/messages/:id` 查询。
 
 ## 文档
+
+「设置 › 外观」可选择跟随系统、浅色或深色，默认跟随系统。选择立即生效并保存在当前浏览器，图表配色同步更新。
+
+在「设置 › 关于」查看当前版本，点击「检查更新」对比 GitHub 最新正式 Release。有新版时会提示升级，并提供对应变更记录、项目源码和作者 X 主页链接。检查由浏览器手动发起，8 秒超时、不自动重试，成功结果缓存 1 分钟；不会自动升级服务。
 
 - [接入指南](docs/usage.md)：HTTP API、消息模板、Service Binding、渠道配置与错误码。
 - [投递方式与运行配置](docs/execution.md)：队列与直接发送、定时与重试、保留设置、认证及费用。

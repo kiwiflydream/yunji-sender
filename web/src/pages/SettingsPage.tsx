@@ -1,3 +1,4 @@
+import { AppearanceSettings } from '../components/AppearanceSettings'
 import { tr, useLocale } from '../i18n'
 import { Button, CodeBlock, Input, LayerCard, Radio, Switch, Text, useKumoToastManager } from '@cloudflare/kumo'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -6,6 +7,7 @@ import type { AdminMe, RuntimeSettings } from '../../../src/shared/types'
 import { api, ApiError, errorMessage, issueMessage } from '../api'
 import { DescriptionList } from '../components/DescriptionList'
 import { PageHeader } from '../components/PageHeader'
+import { AboutSettings } from '../components/AboutSettings'
 import { ErrorBanner, PageLoader } from '../components/States'
 
 const NUMBER_FIELDS = ['maxAttempts', 'retentionDays', 'statsRetentionDays', 'dailyDeliveryLimit', 'perKeyDailyDeliveryLimit', 'perKeyMinuteLimit', 'maxPendingDeliveries', 'dailyWorkLimit'] as const
@@ -28,6 +30,7 @@ export function SettingsPage() {
             </Radio.Group>
           </LayerCard.Primary>
         </LayerCard>
+        <AppearanceSettings />
         {me.isPending ? <PageLoader /> : me.isError ? <ErrorBanner error={me.error} /> : <RuntimeSettingsForm initial={me.data} />}
         <LayerCard>
           <LayerCard.Secondary>
@@ -71,6 +74,7 @@ export function SettingsPage() {
             )}
           </LayerCard.Primary>
         </LayerCard>
+        <AboutSettings />
       </div>
     </>
   )

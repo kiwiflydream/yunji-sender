@@ -5,7 +5,6 @@ import { useQuery } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useLocation } from 'wouter'
 import { api } from '../api'
-import { LanguageSwitch } from './LanguageSwitch'
 
 function SidebarToggle() {
   useLocale()
@@ -62,10 +61,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Text size="xs" variant="secondary" truncate>{me.data.user}</Text>
               </div>
             )}
-            <div className="flex shrink-0 items-center gap-1 group-data-[state=collapsed]/sidebar:flex-col">
-              <LanguageSwitch />
-              <SidebarToggle />
-            </div>
+            <SidebarToggle />
           </div>
         </Sidebar.Footer>
       </Sidebar>
@@ -73,7 +69,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex items-center gap-2 border-b border-kumo-hairline bg-kumo-base px-4 py-2 md:hidden">
           <SidebarToggle />
           <Text bold>{tr('云吉 Sender')}</Text>
-          <div className="ml-auto"><LanguageSwitch /></div>
         </div>
         <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-6">{children}</div>
       </main>

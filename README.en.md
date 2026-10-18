@@ -4,6 +4,8 @@
 
 A multi-channel notification gateway deployed on Cloudflare.
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/kiwiflydream/yunji-sender)
+
 Send order updates, deployment results and service alerts through one API. Manage recipients, templates and retries in the admin UI without integrating every notification provider into each application or running a dedicated server.
 
 [Quick deployment](#quick-deployment) · [Send your first message](#send-your-first-message) · [Integration guide](docs/usage.en.md) · [Local development](docs/development.en.md)
@@ -132,6 +134,10 @@ curl "$SENDER_BASE_URL/api/send" \
 The first submission returns `202` and a `messageId`, meaning it was accepted. Reuse the same key for retries of the same event; use a new idempotency key for a new event. Inspect results in the admin UI or with `GET /api/messages/:id`.
 
 ## Documentation
+
+Choose System, Light or Dark under **Settings › Appearance**. System is the default. Changes apply immediately, are saved in this browser, and update chart colors too.
+
+Under **Settings › About**, view the deployed version and click **Check for updates** to compare it with the latest stable GitHub Release. The panel links to release notes, source code and the author's X profile. Checks run only when clicked, time out after 8 seconds, never retry automatically, and cache successful results for one minute. The service is not upgraded automatically.
 
 - [Integration guide](docs/usage.en.md): HTTP API, templates, Service Bindings, channel configuration and errors.
 - [Execution and settings](docs/execution.en.md): queues, direct delivery, scheduling, retries, retention, authentication and costs.

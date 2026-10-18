@@ -1,6 +1,7 @@
+import { useTheme } from './lib/theme'
 import { KumoLocaleProvider, LinkProvider, type LinkComponentProps, Toasty, TooltipProvider } from '@cloudflare/kumo'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { forwardRef, lazy, Suspense, useEffect } from 'react'
+import { forwardRef, lazy, Suspense } from 'react'
 import { Link as RouterLink, Route, Router, Switch as Routes } from 'wouter'
 import { AppShell } from './components/AppShell'
 import { NotFound, PageLoader } from './components/States'
@@ -28,19 +29,9 @@ const AppLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href = '', 
   href.startsWith('/') ? <RouterLink ref={ref} href={href} {...rest} /> : <a ref={ref} href={href} {...rest} />,
 )
 
-function useSystemColorMode() {
-  useEffect(() => {
-    const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const apply = () => (document.documentElement.dataset.mode = media.matches ? 'dark' : 'light')
-    apply()
-    media.addEventListener('change', apply)
-    return () => media.removeEventListener('change', apply)
-  }, [])
-}
-
 export function App() {
   useLocale()
-  useSystemColorMode()
+  useTheme()
   return (
     <KumoLocaleProvider translations={{ layerDialog: { close: tr('关闭'), cancel: tr('取消') } }}>
       <QueryClientProvider client={queryClient}>

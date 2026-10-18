@@ -83,6 +83,11 @@ test('admin pages, template byte preview, favicon, locale and sidebar', async ({
     expect(response?.status(), path).toBe(200)
     await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
     await expect(page.locator('[role="alert"]')).toHaveCount(0)
+    if (path === '/settings') {
+      await expect(page.getByRole('button', { name: english ? 'Save' : '保存', exact: true })).toBeVisible()
+      await expect(page.getByLabel(english ? 'Maximum attempts' : '最多尝试次数', { exact: true })).toHaveValue('5')
+    }
+    await expect(page.getByRole('button', { name: /^(Switch to English|切换为中文)$/ })).toHaveCount(0)
     await expect(page.locator('vite-error-overlay')).toHaveCount(0)
     await expect(page.locator('html')).toHaveAttribute('lang', locale)
     expect(await page.title()).toContain(english ? 'Yunji Sender' : '云吉 Sender')
@@ -120,12 +125,17 @@ test('admin pages, template byte preview, favicon, locale and sidebar', async ({
     await expect.poll(async () => (await sidebar.boundingBox())!.width).toBeGreaterThan(200)
   }
   await page.screenshot({ path: testInfo.outputPath('admin.png'), animations: 'disabled' })
-  await page.getByRole('button', { name: english ? '切换为中文' : 'Switch to English', exact: true }).last().click()
+  await page.goto('/admin/settings')
+  await page.getByLabel(english ? 'Maximum attempts' : '最多尝试次数', { exact: true }).fill('6')
+  await page.getByRole('radio', { name: english ? '简体中文' : 'English', exact: true }).click()
   const switchedLocale = english ? 'zh-CN' : 'en'
   await expect(page.locator('html')).toHaveAttribute('lang', switchedLocale)
-  await expect(page.getByLabel(english ? '消息预览' : 'Message preview', { exact: true })).toContainText('Order TEST-002')
+  await expect(page.getByLabel(english ? '最多尝试次数' : 'Maximum attempts', { exact: true })).toHaveValue('6')
   await page.reload()
   await expect(page.getByRole('heading', { level: 1 }).first()).toBeVisible()
   await expect(page.locator('html')).toHaveAttribute('lang', switchedLocale)
+  await expect(page.getByLabel(english ? '最多尝试次数' : 'Maximum attempts', { exact: true })).toHaveValue('5')
+  await expect(page.locator('[role="alert"]')).toHaveCount(0)
+  await page.screenshot({ path: testInfo.outputPath('settings-locale.png'), animations: 'disabled' })
   expect(errors).toEqual([])
 })
