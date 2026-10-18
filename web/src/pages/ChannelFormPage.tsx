@@ -44,6 +44,7 @@ function ChannelForm({ initial }: { initial?: Channel }) {
   const [name, setName] = useState(initial?.name ?? '')
   const [enabled, setEnabled] = useState(initial?.enabled ?? true)
   const [config, setConfig] = useState<Record<string, ChannelConfigValue>>(() => ({ ...defaults(type), ...initial?.config }))
+  const [clearSecrets, setClearSecrets] = useState<string[]>([])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [error, setError] = useState<Error | string | null>(null)
   const [testResult, setTestResult] = useState<ChannelTestResult | null>(null)
@@ -62,7 +63,7 @@ function ChannelForm({ initial }: { initial?: Channel }) {
 
   const save = useMutation({
     mutationFn: () => {
-      const input = { name, type, enabled, config }
+      const input = { name, type, enabled, config, clearSecrets }
       return initial ? api.updateChannel(initial.id, input) : api.createChannel(input)
     },
     onSuccess: (saved) => {
@@ -97,6 +98,7 @@ function ChannelForm({ initial }: { initial?: Channel }) {
   const changeType = (next: ChannelType) => {
     setType(next)
     setConfig(defaults(next))
+    setClearSecrets([])
     setErrors({})
   }
 
@@ -158,14 +160,31 @@ function ChannelForm({ initial }: { initial?: Channel }) {
           </LayerCard.Secondary>
           <LayerCard.Primary className="flex flex-col gap-4">
             {info.fields.map((f) => (
-              <FieldInput
-                key={`${type}.${f.key}`}
-                field={f}
-                value={config[f.key]}
-                isSet={initial?.secretsSet.includes(f.key) ?? false}
-                error={issueMessage(errors[`config.${f.key}`])}
-                onChange={(v) => setConfig((c) => ({ ...c, [f.key]: v }))}
-              />
+              <div key={`${type}.${f.key}`} className="flex flex-col gap-2">
+                <FieldInput
+                  field={f}
+                  value={config[f.key]}
+                  isSet={(initial?.secretsSet.includes(f.key) ?? false) && !clearSecrets.includes(f.key)}
+                  error={issueMessage(errors[`config.${f.key}`])}
+                  onChange={(v) => {
+                    setConfig((c) => ({ ...c, [f.key]: v }))
+                    setClearSecrets((keys) => keys.filter((key) => key !== f.key))
+                  }}
+                />
+                {f.secret && !f.required && initial?.secretsSet.includes(f.key) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button type="button" variant="ghost" size="sm"
+                      aria-label={tr(clearSecrets.includes(f.key) ? '撤销清除 {%value0%}' : '清除 {%value0%}', { value0: f.label })}
+                      onClick={() => {
+                        setConfig((c) => ({ ...c, [f.key]: '' }))
+                        setClearSecrets((keys) => keys.includes(f.key) ? keys.filter((key) => key !== f.key) : [...keys, f.key])
+                      }}>
+                      {tr(clearSecrets.includes(f.key) ? '撤销清除' : '清除已保存的值')}
+                    </Button>
+                    {clearSecrets.includes(f.key) && <Text size="sm" variant="secondary">{tr('保存后清除；输入新值可取消清除。')}</Text>}
+                  </div>
+                )}
+              </div>
             ))}
           </LayerCard.Primary>
         </LayerCard>

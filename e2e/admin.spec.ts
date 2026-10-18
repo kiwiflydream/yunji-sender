@@ -1,5 +1,42 @@
 import { expect, test } from '@playwright/test'
-import { seed } from './helpers'
+import { call, providerURL, seed } from './helpers'
+import type { Channel } from '../src/shared/types'
+
+test('optional credentials can be cleared, undone and persisted', async ({ page }, testInfo) => {
+  const english = testInfo.project.use.locale === 'en'
+  await page.addInitScript((locale) => localStorage.setItem('yunji-sender.locale', locale), english ? 'en' : 'zh-CN')
+  const { channel } = await call<{ channel: Channel }>('/admin/api/channels', {
+    method: 'POST', status: 201, data: {
+      name: 'Clear credential fixture', type: 'webhook',
+      config: { url: `${providerURL}/ok`, headers: '{"Authorization":"Bearer dummy-token"}', signingSecret: 'dummy-signature' },
+    },
+  })
+  await page.goto(`/admin/channels/${channel.id}`)
+  // Accessible names identify the field, while visible labels stay short.
+  const buttons = page.getByRole('button').filter({ hasText: english ? /^Clear saved value$/ : /^清除已保存的值$/ })
+  await expect(buttons).toHaveCount(2)
+  await buttons.first().click()
+  const undo = page.getByRole('button').filter({ hasText: english ? /^Undo clearing$/ : /^撤销清除$/ })
+  await expect(undo).toHaveCount(1)
+  await undo.click()
+  await expect(buttons).toHaveCount(2)
+  await buttons.first().click()
+  await buttons.first().click()
+  await expect(undo).toHaveCount(2)
+  const beforeSave = await call<{ channel: Channel }>(`/admin/api/channels/${channel.id}`)
+  expect(beforeSave.channel.secretsSet.sort()).toEqual(['headers', 'signingSecret', 'url'])
+  await page.screenshot({ path: testInfo.outputPath('clear-secrets-pending.png'), fullPage: true })
+  await page.getByRole('button', { name: english ? 'Save' : '保存', exact: true }).click()
+  await expect(page).toHaveURL(/\/admin\/channels$/)
+  const saved = await call<{ channel: Channel }>(`/admin/api/channels/${channel.id}`)
+  expect(saved.channel.secretsSet).toEqual(['url'])
+  await page.goto(`/admin/channels/${channel.id}`)
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Clear credential fixture')
+  await expect(buttons).toHaveCount(0)
+  await expect(undo).toHaveCount(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+  await page.screenshot({ path: testInfo.outputPath('clear-secrets-saved.png'), fullPage: true })
+})
 
 test('admin pages, template byte preview, favicon, locale and sidebar', async ({ page }, testInfo) => {
   const fixture = await seed()

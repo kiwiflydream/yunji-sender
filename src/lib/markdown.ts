@@ -17,19 +17,41 @@ type Block =
   | { t: 'quote'; lines: Inline[][] }
 
 const INLINE_RE =
-  /(`+)([\s\S]*?[^`])\1(?!`)|\*\*([\s\S]+?)\*\*|__([\s\S]+?)__|~~([\s\S]+?)~~|\*([^*\s](?:[^*]*[^*\s])?)\*|(?<![\p{L}\p{N}])_([^_\s](?:[^_]*[^_\s])?)_(?![\p{L}\p{N}])|\[([^\]]+)\]\(([^)\s]+)\)/gu
+  /(`+)|\*\*([\s\S]+?)\*\*|__([\s\S]+?)__|~~([\s\S]+?)~~|\*([^*\s](?:[^*]*[^*\s])?)\*|(?<![\p{L}\p{N}])_([^_\s](?:[^_]*[^_\s])?)_(?![\p{L}\p{N}])|\[([^\[\]]+)\]\(([^)\s]+)\)/gu
 
-export function parseInline(src: string): Inline[] {
+export function parseInline(src: string, depth = 0): Inline[] {
+  // Bound recursive formatting work; overly nested markup remains literal.
+  if (depth >= 32) return [{ t: 'text', v: src }]
+  // Match complete backtick runs by length, without a backtracking backreference.
+  // Index once so many unmatched openers cannot repeatedly scan the same suffix.
+  const runs = [...src.matchAll(/`+/g)]
+  const nextRun = new Map<number, number>()
+  const closing = new Map<number, number>()
+  for (let i = runs.length - 1; i >= 0; i--) {
+    const run = runs[i]
+    const next = nextRun.get(run[0].length)
+    if (next !== undefined) closing.set(run.index, next)
+    nextRun.set(run[0].length, run.index)
+  }
   const out: Inline[] = []
+  const pattern = new RegExp(INLINE_RE)
   let last = 0
-  for (const m of src.matchAll(INLINE_RE)) {
+  let m: RegExpExecArray | null
+  while ((m = pattern.exec(src)) !== null) {
     if (m.index > last) out.push({ t: 'text', v: src.slice(last, m.index) })
-    if (m[1]) out.push({ t: 'code', v: m[2].trim() === '' ? m[2] : m[2].replace(/^ (.*) $/, '$1') })
-    else if (m[3] ?? m[4]) out.push({ t: 'bold', c: parseInline(m[3] ?? m[4]) })
-    else if (m[5]) out.push({ t: 'strike', c: parseInline(m[5]) })
-    else if (m[6] ?? m[7]) out.push({ t: 'italic', c: parseInline(m[6] ?? m[7]) })
-    else out.push({ t: 'link', href: m[9], c: parseInline(m[8]) })
-    last = m.index + m[0].length
+    if (m[1]) {
+      const end = closing.get(m.index)
+      if (end === undefined) out.push({ t: 'text', v: m[1] })
+      else {
+        const text = src.slice(m.index + m[1].length, end)
+        out.push({ t: 'code', v: text.trim() === '' ? text : text.replace(/^ (.*) $/, '$1') })
+        pattern.lastIndex = end + m[1].length
+      }
+    } else if (m[2] ?? m[3]) out.push({ t: 'bold', c: parseInline(m[2] ?? m[3], depth + 1) })
+    else if (m[4]) out.push({ t: 'strike', c: parseInline(m[4], depth + 1) })
+    else if (m[5] ?? m[6]) out.push({ t: 'italic', c: parseInline(m[5] ?? m[6], depth + 1) })
+    else out.push({ t: 'link', href: m[8], c: parseInline(m[7], depth + 1) })
+    last = pattern.lastIndex
   }
   if (last < src.length) out.push({ t: 'text', v: src.slice(last) })
   return out

@@ -11,6 +11,7 @@ export const channelInputSchema = z.object({
   type: z.enum(CHANNEL_TYPES),
   enabled: z.boolean().default(true),
   config: z.record(z.string(), z.unknown()).default({}),
+  clearSecrets: z.array(z.string().min(1).max(64)).max(50).default([]),
 })
 
 export type ChannelInput = z.output<typeof channelInputSchema>
@@ -103,19 +104,31 @@ function checkType(type: ChannelType, c: Record<string, ChannelConfigValue>, iss
 /**
  * Validate a channel config against its catalog entry and split it into public
  * and secret parts. An empty secret keeps `existing[key]` (edit without retyping).
+ * Only clearSecrets explicitly removes optional credentials.
  */
 export function parseChannelConfig(
   type: ChannelType,
   input: Record<string, unknown>,
   existing: Record<string, string> = {},
+  clearSecrets: string[] = [],
 ): { config: Record<string, ChannelConfigValue>; secrets: Record<string, string> } {
   const issues: Issue[] = []
   const config: Record<string, ChannelConfigValue> = {}
   const secrets: Record<string, string> = {}
+  const clear = new Set(clearSecrets)
+  for (const key of clear) {
+    const field = CHANNEL_CATALOG[type].fields.find((f) => f.key === key)
+    if (!field?.secret || field.required) {
+      issues.push({ path: `config.${key}`, message: '只能清除可选凭据字段' })
+    } else if (typeof input[key] === 'string' && input[key].trim() !== '') {
+      issues.push({ path: `config.${key}`, message: '不能同时清除和设置同一凭据' })
+    }
+  }
   for (const f of CHANNEL_CATALOG[type].fields) {
     let value = checkField(f, input[f.key], issues)
     if (value === undefined) continue
-    if (f.secret && value === '' && existing[f.key]) value = existing[f.key]
+    if (f.secret && clear.has(f.key)) value = ''
+    else if (f.secret && value === '' && existing[f.key]) value = existing[f.key]
     if (f.required && value === '') {
       issues.push({ path: `config.${f.key}`, message: `${f.label}不能为空` })
       continue
@@ -168,7 +181,7 @@ export async function loadChannel(env: CloudflareBindings, id: string): Promise<
 
 export async function createChannel(env: CloudflareBindings, raw: unknown, now = Date.now()): Promise<Channel> {
   const input = parseOrThrow(channelInputSchema, raw)
-  const { config, secrets } = parseChannelConfig(input.type, input.config)
+  const { config, secrets } = parseChannelConfig(input.type, input.config, {}, input.clearSecrets)
   const id = crypto.randomUUID()
   await env.DB.prepare(
     `INSERT INTO channels (id, name, type, enabled, config, secrets_encrypted, created_at, updated_at)
@@ -187,7 +200,7 @@ export async function updateChannel(env: CloudflareBindings, id: string, raw: un
   const input = parseOrThrow(channelInputSchema, raw)
   if (input.type !== row.type) throw new ValidationError([{ path: 'type', message: '渠道类型创建后不能修改' }])
   const existing = await decryptSecrets(env.ENCRYPTION_KEY, row)
-  const { config, secrets } = parseChannelConfig(input.type, input.config, existing)
+  const { config, secrets } = parseChannelConfig(input.type, input.config, existing, input.clearSecrets)
   await env.DB.prepare(
     'UPDATE channels SET name = ?, enabled = ?, config = ?, secrets_encrypted = ?, updated_at = ? WHERE id = ?',
   )

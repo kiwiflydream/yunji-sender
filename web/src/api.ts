@@ -62,6 +62,7 @@ export interface ChannelInput {
   type: ChannelType
   enabled: boolean
   config: Record<string, ChannelConfigValue>
+  clearSecrets?: string[]
 }
 
 export interface ChannelGroupInput {

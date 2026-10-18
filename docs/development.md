@@ -33,7 +33,7 @@ curl 'http://localhost:5173/cdn-cgi/handler/scheduled?cron=*+*+*+*+*'
 | 命令 | 覆盖范围 |
 | --- | --- |
 | `pnpm typecheck` | Worker、前端、单元测试与浏览器测试四套 TypeScript 配置 |
-| `pnpm test` | 在 workerd 中运行 Vitest |
+| `pnpm test` | 在 workerd 中运行 Vitest，并在可终止的独立线程中检查 Markdown 恶意输入性能 |
 | `pnpm build` | 构建 Worker 和前端静态资源 |
 | `pnpm check` | 依次执行类型检查、单元测试和构建 |
 | `pnpm test:e2e` | 构建独立临时环境，运行真实本地 Worker 与模拟渠道的浏览器、API 测试 |

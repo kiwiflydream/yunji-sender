@@ -1,5 +1,12 @@
 // UI text only. Saved messages, names and protocol identifiers are never translated.
 export const en: Record<string, string> = {
+  "清除 {%value0%}": "Clear {%value0%}",
+  "撤销清除 {%value0%}": "Undo clearing {%value0%}",
+  "撤销清除": "Undo clearing",
+  "清除已保存的值": "Clear saved value",
+  "保存后清除；输入新值可取消清除。": "Cleared when you save; enter a new value to cancel clearing.",
+  "只能清除可选凭据字段": "Only optional credential fields can be cleared",
+  "不能同时清除和设置同一凭据": "A credential cannot be cleared and set at the same time",
   "消息": "Messages",
   "渠道": "Channels",
   "模板": "Templates",

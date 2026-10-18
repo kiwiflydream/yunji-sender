@@ -16,6 +16,14 @@ a < b && c
 > 引用`
 
 describe('markdown', () => {
+  it('matches complete code delimiters and preserves unmatched runs', () => {
+    expect(markdownToHtml('x ``a ` b`` y')).toBe('<p>x <code>a ` b</code> y</p>')
+    expect(markdownToHtml('**before `x` after**')).toBe('<p><strong>before <code>x</code> after</strong></p>')
+    expect(markdownToHtml('x ` a `')).toBe('<p>x <code>a</code></p>')
+    expect(markdownToHtml('x `  `')).toBe('<p>x <code>  </code></p>')
+    expect(markdownToPlain('x `` unmatched `')).toBe('x `` unmatched `')
+  })
+
   it('renders HTML with escaping', () => {
     const html = markdownToHtml(SAMPLE)
     expect(html).toContain('<h1>部署失败</h1>')

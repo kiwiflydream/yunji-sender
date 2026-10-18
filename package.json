@@ -10,7 +10,7 @@
     "deploy": "pnpm check && pnpm db:migrate:remote && wrangler deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings --strict-vars=false",
     "typecheck": "tsc --noEmit && tsc --noEmit -p web && tsc --noEmit -p test && tsc --noEmit -p e2e",
-    "test": "vitest run",
+    "test": "vitest run && node --test scripts/test-markdown-performance.mjs",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",

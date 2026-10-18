@@ -141,6 +141,8 @@ const result = await env.SENDER.send(
 
 在「渠道」页选择类型后，后台会显示对应凭据与可选设置。凭据字段加密保存，接口不返回已保存的明文；编辑时留空保留原值。各渠道支持「测试」，可先单独确认目标可用，再绑定渠道组。
 
+已保存的可选凭据（如签名密钥、Webhook 请求头、PushPlus 指定接收人）可点击「清除已保存的值」，保存后生效，保存前可以撤销。必填凭据不可清除。后台接口 `PUT /admin/api/channels/:id` 使用 `clearSecrets: ["字段名"]` 显式清除可选凭据；`config` 中省略、空字符串或 `null` 仍表示保留旧值。同一字段不能同时提交非空新值和清除请求。
+
 Markdown 的呈现取决于渠道：Telegram 转为 HTML，Slack 转为 mrkdwn，Email 转为 HTML 邮件，Bark 降为纯文本；飞书以卡片发送 Markdown。渠道有自己的正文长度和格式限制，部分适配器会截断过长内容。Webhook 只发送规范化 JSON，不代替接收端渲染。
 
 ### PushPlus
