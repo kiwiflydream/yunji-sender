@@ -72,6 +72,7 @@ curl -X POST "$SENDER_BASE_URL/api/messages/MESSAGE_ID/cancel" \
 | 401 | API Key 缺失、无效或已吊销 |
 | 403 | API Key 无权向指定目标发送 |
 | 404 | 消息不存在、已清理或不属于当前 Key |
+| 408 | 请求体在 10 秒内未读取完成，响应 `error: request_timeout` |
 | 413 | HTTP JSON 请求体超过 256 KB，响应含 `maxBytes: 262144` |
 | 422 | 参数、目标、模板、变量或内容大小不符合要求，响应 `issues` 包含字段路径和原因 |
 | 429 | 费用保护额度已用尽或积压已满，响应 `error: safety_limit`；遵守 `Retry-After` 后沿用原幂等键重试 |

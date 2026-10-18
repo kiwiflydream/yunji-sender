@@ -2,10 +2,14 @@ import type { Context } from 'hono'
 import { ForbiddenError, ValidationError } from '../domain/errors'
 import { JSON_REQUEST_LIMIT } from '../shared/limits'
 import { resumeAt, safetyCode } from '../domain/safety'
+import { OperationTimeoutError, withTimeout } from '../lib/timeout'
 
 class RequestTooLargeError extends Error {}
+class RequestBodyTimeoutError extends Error {}
+const REQUEST_BODY_TIMEOUT_MS = 10_000
 
 export function handleError(err: Error, c: Context) {
+  if (err instanceof RequestBodyTimeoutError) return c.json({ error: 'request_timeout' }, 408)
   const code = safetyCode(err)
   if (code) {
     const now = Date.now()
@@ -31,16 +35,18 @@ export async function jsonBody(req: Request): Promise<unknown> {
     const chunks: Uint8Array[] = []
     let size = 0
     try {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        size += value.byteLength
-        if (size > JSON_REQUEST_LIMIT) {
-          void reader.cancel().catch(() => {})
-          throw new RequestTooLargeError()
+      await withTimeout((async () => {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          size += value.byteLength
+          if (size > JSON_REQUEST_LIMIT) {
+            void reader.cancel().catch(() => {})
+            throw new RequestTooLargeError()
+          }
+          chunks.push(value)
         }
-        chunks.push(value)
-      }
+      })(), REQUEST_BODY_TIMEOUT_MS, () => { void reader.cancel().catch(() => {}) })
     } finally {
       reader.releaseLock()
     }
@@ -52,6 +58,7 @@ export async function jsonBody(req: Request): Promise<unknown> {
     }
     return JSON.parse(new TextDecoder().decode(bytes))
   } catch (err) {
+    if (err instanceof OperationTimeoutError) throw new RequestBodyTimeoutError()
     if (err instanceof RequestTooLargeError) throw err
     throw new ValidationError([{ path: '', message: '请求体必须是合法的 JSON' }])
   }

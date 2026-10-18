@@ -236,6 +236,7 @@ export default function ApiDocsPage() {
               { name: '401', type: 'unauthorized', description: tr('缺少 Bearer Token，或 API Key 无效、已吊销、已删除。') },
               { name: '403', type: 'forbidden', description: tr('API Key 无权向指定目标发送。响应包含 message 说明原因。') },
               { name: '404', type: 'not_found', description: tr('消息不存在、已清理，或不属于当前 API Key；公开 API 路径不存在也返回此错误。') },
+              { name: '408', type: 'request_timeout', description: tr('请求体未在 10 秒内读取完成。请检查网络并沿用同一个 Idempotency-Key 重试。') },
               { name: '413', type: 'payload_too_large', description: tr('JSON 请求体超过 256 KB，响应 maxBytes 表示允许的最大字节数。') },
               { name: '422', type: 'validation_failed', description: tr('JSON 不合法、参数错误、模板或目标不存在、渠道停用、变量缺失或内容超限。响应 issues 数组包含字段路径 path 和说明 message。') },
               { name: '429 / 503', type: 'safety_limit', description: tr('429 表示费用保护额度耗尽或积压已满，503 表示管理员已暂停发送。遵守 Retry-After，并沿用同一个 Idempotency-Key 重试。') },

@@ -1,5 +1,7 @@
 // UI text only. Saved messages, names and protocol identifiers are never translated.
 export const en: Record<string, string> = {
+  "请求体未在 10 秒内读取完成。请检查网络并沿用同一个 Idempotency-Key 重试。": "The request body was not received within 10 seconds. Check your connection and retry with the same Idempotency-Key.",
+  "请求体读取超时，请检查网络后重试": "Request body read timed out. Check your connection and retry.",
   "429 表示费用保护额度耗尽或积压已满，503 表示管理员已暂停发送。遵守 Retry-After，并沿用同一个 Idempotency-Key 重试。": "429 means a cost protection quota or backlog limit was reached; 503 means sending is paused. Respect Retry-After and retry with the same Idempotency-Key.",
   "费用保护": "Cost protection",
   "暂停所有发送": "Pause all sending",

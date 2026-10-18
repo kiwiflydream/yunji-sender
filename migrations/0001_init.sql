@@ -93,6 +93,14 @@ CREATE INDEX idx_deliveries_message ON deliveries (message_id);
 -- Only in-flight deliveries stay in this index; the cron scans it every minute.
 CREATE INDEX idx_deliveries_pending ON deliveries (status, next_attempt_at)
   WHERE status IN ('scheduled', 'queued', 'sending');
+-- SQLite does not infer the IN predicate above from status = 'scheduled', etc.
+-- Match each cron predicate exactly so completed history is never scanned.
+CREATE INDEX idx_deliveries_scheduled ON deliveries (next_attempt_at, dispatch_after)
+  WHERE status = 'scheduled';
+CREATE INDEX idx_deliveries_queued ON deliveries (MAX(next_attempt_at, COALESCE(last_dispatched_at, updated_at)))
+  WHERE status = 'queued';
+CREATE INDEX idx_deliveries_sending ON deliveries (lease_until)
+  WHERE status = 'sending';
 
 CREATE INDEX idx_deliveries_deadline ON deliveries (deadline_at)
   WHERE status IN ('scheduled', 'queued');
