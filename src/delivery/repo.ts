@@ -1,3 +1,4 @@
+import { DELIVERY_LIFETIME_MS, MAX_DISPATCHES } from './limits'
 import type { ChannelType, Delivery, DeliveryStatus, MessageContent } from '../shared/types'
 
 export const HOUR_MS = 60 * 60_000
@@ -70,9 +71,10 @@ export async function claimDelivery(
     .prepare(
       `UPDATE deliveries SET status = 'sending', attempts = attempts + 1, lease_until = ?, updated_at = ?
        WHERE id = ? AND attempts = ? AND status IN ('scheduled', 'queued')
+         AND deadline_at > ?
        RETURNING id, message_id, channel_id, channel_type, channel_group_slug, attempts`,
     )
-    .bind(now + LEASE_MS, now, id, expectedAttempts)
+    .bind(now + LEASE_MS, now, id, expectedAttempts, now)
     .first<Pick<DeliveryRow, 'id' | 'message_id' | 'channel_id' | 'channel_type' | 'channel_group_slug' | 'attempts'>>()
   if (!row) return null
   return loadClaimed(db, row)
@@ -133,7 +135,7 @@ function finalStatsStatement(db: D1Database, id: string, attempts: number, sent:
   return db
     .prepare(
       `INSERT INTO delivery_stats (bucket, channel_id, channel_group_slug, sent, failed, retries, latency_sum, latency_max)
-       SELECT m.send_at - m.send_at % ${STATS_BUCKET_MS}, d.channel_id, COALESCE(d.channel_group_slug, ''), ?, ?, d.attempts - 1,
+       SELECT m.send_at - m.send_at % ${STATS_BUCKET_MS}, d.channel_id, COALESCE(d.channel_group_slug, ''), ?, ?, MAX(0, d.attempts - 1),
          ? * MAX(0, ? - m.send_at), ? * MAX(0, ? - m.send_at)
        FROM deliveries d JOIN messages m ON m.id = d.message_id
        WHERE d.id = ? AND d.status = 'sending' AND d.attempts = ?
@@ -174,7 +176,7 @@ export async function deferDelivery(
 ): Promise<boolean> {
   const res = await db
     .prepare(
-      `UPDATE deliveries SET status = ?, next_attempt_at = ?, lease_until = NULL, duration_ms = ?, http_status = ?,
+      `UPDATE deliveries SET status = ?, next_attempt_at = ?, dispatch_after = 0, lease_until = NULL, duration_ms = ?, http_status = ?,
          response_body = ?, error = ?, updated_at = ?
        WHERE id = ? AND status = 'sending' AND attempts = ?`,
     )
@@ -217,7 +219,7 @@ export async function reopenDelivery(
     db
       .prepare(
         `UPDATE delivery_stats SET failed = failed - 1, retries = MAX(0, retries - (
-           SELECT attempts - 1 FROM deliveries WHERE id = ?1))
+           SELECT MAX(0, attempts - 1) FROM deliveries WHERE id = ?1))
          WHERE (bucket, channel_id, channel_group_slug) = (
            SELECT m.send_at - m.send_at % ${STATS_BUCKET_MS}, d.channel_id, COALESCE(d.channel_group_slug, '')
            FROM deliveries d JOIN messages m ON m.id = d.message_id WHERE d.id = ?1 AND d.status = 'failed')
@@ -226,11 +228,33 @@ export async function reopenDelivery(
       .bind(id),
     db
       .prepare(
-        `UPDATE deliveries SET status = ?, next_attempt_at = ?, finished_at = NULL, updated_at = ?
+        `UPDATE deliveries SET status = ?, next_attempt_at = ?, finished_at = NULL, updated_at = ?,
+           dispatch_count = 0, dispatch_after = 0, deadline_at = ?
          WHERE id = ? AND status IN ('failed', 'canceled') RETURNING attempts`,
       )
-      .bind(status, now, now, id),
+      .bind(status, now, now, now + DELIVERY_LIFETIME_MS, id),
   ])
   const row = (update.results as { attempts: number }[])[0]
   return row ?? null
+}
+
+/** Terminal failures for exhausted dispatches or expired deadlines, counted once. */
+export async function expirePending(db: D1Database, now: number, limit: number): Promise<void> {
+  const { results } = await db.prepare(`SELECT id FROM deliveries
+    WHERE status IN ('scheduled', 'queued') AND
+      (deadline_at <= ? OR (status = 'scheduled' AND dispatch_count >= ${MAX_DISPATCHES}))
+    LIMIT ?`).bind(now, limit).all<{ id: string }>()
+  if (!results.length) return
+  const ids = JSON.stringify(results.map((d) => d.id))
+  const predicate = `d.id IN (SELECT value FROM json_each(?1)) AND d.status IN ('scheduled', 'queued')
+    AND (d.deadline_at <= ?2 OR (d.status = 'scheduled' AND d.dispatch_count >= ${MAX_DISPATCHES}))`
+  await db.batch([
+    db.prepare(`INSERT INTO delivery_stats (bucket, channel_id, channel_group_slug, sent, failed, retries, latency_sum, latency_max)
+      SELECT m.send_at - m.send_at % ${STATS_BUCKET_MS}, d.channel_id, COALESCE(d.channel_group_slug, ''),
+        0, 1, MAX(0, d.attempts - 1), 0, 0
+      FROM deliveries d JOIN messages m ON m.id = d.message_id WHERE ${predicate}
+      ${STATS_UPSERT}`).bind(ids, now),
+    db.prepare(`UPDATE deliveries AS d SET status='failed', lease_until=NULL, finished_at=?2, updated_at=?2,
+      error='投递已停止：超过派发次数或发送截止时间' WHERE ${predicate}`).bind(ids, now),
+  ])
 }

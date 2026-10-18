@@ -1,5 +1,5 @@
 import { tr, useLocale } from '../i18n'
-import { Button, CodeBlock, Input, LayerCard, Radio, Text, useKumoToastManager } from '@cloudflare/kumo'
+import { Button, CodeBlock, Input, LayerCard, Radio, Switch, Text, useKumoToastManager } from '@cloudflare/kumo'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import type { AdminMe, RuntimeSettings } from '../../../src/shared/types'
@@ -8,7 +8,7 @@ import { DescriptionList } from '../components/DescriptionList'
 import { PageHeader } from '../components/PageHeader'
 import { ErrorBanner, PageLoader } from '../components/States'
 
-const NUMBER_FIELDS = ['maxAttempts', 'retentionDays', 'statsRetentionDays'] as const
+const NUMBER_FIELDS = ['maxAttempts', 'retentionDays', 'statsRetentionDays', 'dailyDeliveryLimit', 'perKeyDailyDeliveryLimit', 'perKeyMinuteLimit', 'maxPendingDeliveries', 'dailyWorkLimit'] as const
 
 export function SettingsPage() {
   const { locale, setLocale } = useLocale()
@@ -79,6 +79,7 @@ export function SettingsPage() {
 function RuntimeSettingsForm({ initial }: { initial: AdminMe }) {
   useLocale()
   const [mode, setMode] = useState(initial.executionMode)
+  const [sendingPaused, setSendingPaused] = useState(initial.sendingPaused)
   const [numbers, setNumbers] = useState(() =>
     Object.fromEntries(NUMBER_FIELDS.map((k) => [k, String(initial[k])])) as Record<(typeof NUMBER_FIELDS)[number], string>,
   )
@@ -93,6 +94,12 @@ function RuntimeSettingsForm({ initial }: { initial: AdminMe }) {
         maxAttempts: Number(numbers.maxAttempts),
         retentionDays: Number(numbers.retentionDays),
         statsRetentionDays: Number(numbers.statsRetentionDays),
+        sendingPaused,
+        dailyDeliveryLimit: Number(numbers.dailyDeliveryLimit),
+        perKeyDailyDeliveryLimit: Number(numbers.perKeyDailyDeliveryLimit),
+        perKeyMinuteLimit: Number(numbers.perKeyMinuteLimit),
+        maxPendingDeliveries: Number(numbers.maxPendingDeliveries),
+        dailyWorkLimit: Number(numbers.dailyWorkLimit),
       }),
     onSuccess: (saved) => {
       qc.setQueryData<AdminMe>(['me'], (prev) => (prev ? { ...prev, ...saved } : prev))
@@ -156,6 +163,16 @@ function RuntimeSettingsForm({ initial }: { initial: AdminMe }) {
             {numberInput('maxAttempts', tr('最多尝试次数'), tr('含首次，1–10；只有可重试的错误会重试'))}
             {numberInput('retentionDays', tr('消息保留天数'), tr('过期的消息和投递记录每小时清理'))}
             {numberInput('statsRetentionDays', tr('统计保留天数'), tr('按小时汇总的统计数据'))}
+          </div>
+          <Text bold>{tr('费用保护')}</Text>
+          <Switch label={tr('暂停所有发送')} checked={sendingPaused} onCheckedChange={setSendingPaused} />
+          <Text size="sm" variant="secondary">{tr('保存后拒绝新消息并暂停派发和渠道测试；已在发送的请求无法撤回。')}</Text>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {numberInput('dailyDeliveryLimit', tr('每日投递接收上限'), tr('按渠道目标计数，每天 UTC 00:00 重置'))}
+            {numberInput('perKeyDailyDeliveryLimit', tr('每个调用方每日上限'), tr('每个 API Key 独立计数；后台和 RPC 分别共享额度'))}
+            {numberInput('perKeyMinuteLimit', tr('每个调用方每分钟上限'), tr('按渠道目标计数，按 UTC 自然分钟重置'))}
+            {numberInput('maxPendingDeliveries', tr('待处理投递上限'), tr('包含定时、排队和发送中的投递；达到上限拒绝新消息'))}
+            {numberInput('dailyWorkLimit', tr('每日执行预算'), tr('每次入队或发送尝试消耗 1 次；含重试和渠道测试，每天 UTC 重置'))}
           </div>
           {error && <Text variant="error">{errorMessage(error)}</Text>}
           <div className="flex justify-end">

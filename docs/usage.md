@@ -74,6 +74,8 @@ curl -X POST "$SENDER_BASE_URL/api/messages/MESSAGE_ID/cancel" \
 | 404 | 消息不存在、已清理或不属于当前 Key |
 | 413 | HTTP JSON 请求体超过 256 KB，响应含 `maxBytes: 262144` |
 | 422 | 参数、目标、模板、变量或内容大小不符合要求，响应 `issues` 包含字段路径和原因 |
+| 429 | 费用保护额度已用尽或积压已满，响应 `error: safety_limit`；遵守 `Retry-After` 后沿用原幂等键重试 |
+| 503 | 管理员已暂停发送，响应 `error: safety_limit, reason: paused` |
 | 500 | 服务内部错误，重试发送时沿用原幂等键 |
 
 这些状态码描述本次 API 请求。上游渠道拒绝、网络错误等投递问题，应查看消息详情中的结果。

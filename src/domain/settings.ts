@@ -2,6 +2,12 @@ import { z } from 'zod'
 import { DEFAULT_RUNTIME_SETTINGS, type RuntimeSettings } from '../shared/types'
 
 export const runtimeSettingsSchema = z.object({
+  sendingPaused: z.boolean(),
+  dailyDeliveryLimit: z.number().int().min(1).max(1000000),
+  perKeyDailyDeliveryLimit: z.number().int().min(1).max(1000000),
+  perKeyMinuteLimit: z.number().int().min(1).max(100000),
+  maxPendingDeliveries: z.number().int().min(1).max(100000),
+  dailyWorkLimit: z.number().int().min(1).max(3000000),
   executionMode: z.enum(['queue', 'direct']),
   maxAttempts: z.number().int().min(1).max(10),
   retentionDays: z.number().int().min(1).max(3650),

@@ -2,11 +2,13 @@ import { getProvider } from '../channels/registry'
 import { redact, redactResponse } from '../lib/redact'
 import type { ChannelTestResult } from '../shared/types'
 import { loadChannel } from './channels'
+import { reserveWork } from './safety'
 
 /** Send a sample message synchronously, bypassing queue, retries and logs. */
 export async function testChannel(env: CloudflareBindings, id: string, now = Date.now()): Promise<ChannelTestResult | null> {
   const channel = await loadChannel(env, id)
   if (!channel) return null
+  await reserveWork(env.DB, now)
   const testId = `test-${crypto.randomUUID()}`
   let outcome
   try {

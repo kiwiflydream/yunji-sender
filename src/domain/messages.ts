@@ -1,3 +1,4 @@
+import { DELIVERY_LIFETIME_MS } from '../delivery/limits'
 import { z } from 'zod'
 import { dispatchQueued } from '../delivery/dispatch'
 import { effectiveMode, QUEUE_MAX_DELAY_S } from '../delivery/mode'
@@ -111,8 +112,6 @@ async function resolveTargets(db: D1Database, channelGroup: string | undefined, 
   return [...targets.values()]
 }
 
-const isUniqueViolation = (err: unknown) => err instanceof Error && /UNIQUE constraint failed/i.test(err.message)
-
 async function sendResultOf(db: D1Database, messageId: string, duplicate: boolean): Promise<SendResult | null> {
   const msg = await db.prepare('SELECT send_at FROM messages WHERE id = ?').bind(messageId).first<{ send_at: number }>()
   if (!msg) return null
@@ -186,20 +185,20 @@ export async function sendMessage(env: CloudflareBindings, raw: unknown, opts: S
     await env.DB.batch([
       env.DB
         .prepare(
-          `INSERT INTO messages (id, channel_group_slug, source, api_key_id, idem, payload, send_at, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO messages (id, channel_group_slug, source, api_key_id, idem, payload, send_at, created_at, delivery_count)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(messageId, channelGroup, opts.source, opts.caller?.id ?? null, idem, JSON.stringify(content), sendAt, now),
+        .bind(messageId, channelGroup, opts.source, opts.caller?.id ?? null, idem, JSON.stringify(content), sendAt, now, deliveries.length),
       env.DB.prepare(
         `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, channel_group_slug, status,
-           next_attempt_at, created_at, updated_at)
+           next_attempt_at, created_at, updated_at, deadline_at)
          SELECT json_extract(value, '$.deliveryId'), ?1, json_extract(value, '$.id'), json_extract(value, '$.type'),
-           json_extract(value, '$.name'), ?2, ?3, ?4, ?5, ?5 FROM json_each(?6)`,
-      ).bind(messageId, channelGroup, status, sendAt, now, JSON.stringify(deliveries)),
+           json_extract(value, '$.name'), ?2, ?3, ?4, ?5, ?5, ?7 FROM json_each(?6)`,
+      ).bind(messageId, channelGroup, status, sendAt, now, JSON.stringify(deliveries), sendAt + DELIVERY_LIFETIME_MS),
     ])
   } catch (err) {
     // A concurrent request with the same key won the race.
-    if (idem && isUniqueViolation(err)) {
+    if (idem) {
       const existing = await env.DB.prepare('SELECT id FROM messages WHERE idem = ?').bind(idem).first<{ id: string }>()
       if (existing) return (await sendResultOf(env.DB, existing.id, true))!
     }
@@ -294,8 +293,8 @@ export const MESSAGE_STATUSES = ['scheduled', 'pending', 'sent', 'partial', 'fai
 
 export const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
-  // New cursors include the id to break timestamp ties; accept old timestamps too.
-  before: z.string().max(128).regex(/^[1-9]\d*(?::[A-Za-z0-9-]+)?$/)
+  // Include the id to break timestamp ties.
+  before: z.string().max(128).regex(/^[1-9]\d*:[A-Za-z0-9-]+$/)
     .refine((v) => Number.isSafeInteger(Number(v.split(':')[0])), '无效的分页游标').optional(),
   channelGroup: z.string().trim().min(1).optional(),
   status: z.enum(MESSAGE_STATUSES).optional(),
@@ -310,13 +309,8 @@ export async function listMessages(
   const params: unknown[] = []
   if (q.before) {
     const [at, id] = q.before.split(':')
-    if (id) {
-      where.push('(m.created_at, m.id) < (?, ?)')
-      params.push(Number(at), id)
-    } else {
-      where.push('m.created_at < ?')
-      params.push(Number(at))
-    }
+    where.push('(m.created_at, m.id) < (?, ?)')
+    params.push(Number(at), id)
   }
   if (q.channelGroup) {
     where.push('m.channel_group_slug = ?')

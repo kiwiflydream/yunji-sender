@@ -2,6 +2,8 @@
 
 [返回 README](../README.md)
 
+项目尚未上线，按全新部署维护：表结构直接更新 `migrations/0001_init.sql`，不保留历史数据升级脚本或旧客户端兼容分支。
+
 ## 启动开发环境
 
 需要 Node.js 22.12 及以上和 pnpm 10.34.4，版本约束见 [package.json](../package.json)。在项目目录执行：
@@ -20,7 +22,7 @@ pnpm dev
 
 打开 `http://localhost:5173/admin`，使用 `admin` 和 `.dev.vars` 中的密码登录。端口被占用时，以 Vite 输出地址为准。本地开发无需 Cloudflare 登录，也无需预先创建线上数据库或队列。
 
-本地迁移操作本地 D1，部署脚本才会应用远端迁移。`.dev.vars` 不会自动上传为线上密钥，不要提交真实凭据。
+本地初始化操作本地 D1，部署脚本才会初始化远端 D1。`.dev.vars` 不会自动上传为线上密钥，不要提交真实凭据。
 
 手动触发本地 Cron：
 
@@ -55,7 +57,7 @@ Linux CI 可使用 `pnpm exec playwright install --with-deps chromium` 安装系
 
 ## 发布
 
-`pnpm run deploy` 依次执行 `pnpm check`、远端 D1 迁移和 Wrangler 发布。它不会运行浏览器测试；发布前在本机或 CI 完成 `pnpm check:release`。
+`pnpm run deploy` 依次执行 `pnpm check`、远端 D1 初始化和 Wrangler 发布。它不会运行浏览器测试；发布前在本机或 CI 完成 `pnpm check:release`。
 
 首次上线还需在目标 Cloudflare 环境验收登录、真实渠道投递、定时消息、失败重试与统计。本地模拟渠道通过不代表真实渠道已通过验收。
 
@@ -69,7 +71,7 @@ src/
   routes/     HTTP API 与后台入口
   shared/     前后端共用类型、模板和渠道元数据
 web/src/      React 管理后台
-migrations/   D1 迁移
+migrations/   D1 初始化结构
 test/         workerd 单元测试
 e2e/          Playwright 浏览器与 API 测试
 ```

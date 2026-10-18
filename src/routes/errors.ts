@@ -1,10 +1,17 @@
 import type { Context } from 'hono'
 import { ForbiddenError, ValidationError } from '../domain/errors'
 import { JSON_REQUEST_LIMIT } from '../shared/limits'
+import { resumeAt, safetyCode } from '../domain/safety'
 
 class RequestTooLargeError extends Error {}
 
 export function handleError(err: Error, c: Context) {
+  const code = safetyCode(err)
+  if (code) {
+    const now = Date.now()
+    c.header('retry-after', String(Math.ceil((resumeAt(code, now) - now) / 1000)))
+    return c.json({ error: 'safety_limit', reason: code }, code === 'paused' ? 503 : 429)
+  }
   if (err instanceof RequestTooLargeError) return c.json({ error: 'payload_too_large', maxBytes: JSON_REQUEST_LIMIT }, 413)
   if (err instanceof ValidationError) return c.json({ error: 'validation_failed', issues: err.issues }, 422)
   if (err instanceof ForbiddenError) return c.json({ error: 'forbidden', message: err.message }, 403)

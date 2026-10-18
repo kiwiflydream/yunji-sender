@@ -1,5 +1,21 @@
 // UI text only. Saved messages, names and protocol identifiers are never translated.
 export const en: Record<string, string> = {
+  "429 表示费用保护额度耗尽或积压已满，503 表示管理员已暂停发送。遵守 Retry-After，并沿用同一个 Idempotency-Key 重试。": "429 means a cost protection quota or backlog limit was reached; 503 means sending is paused. Respect Retry-After and retry with the same Idempotency-Key.",
+  "费用保护": "Cost protection",
+  "暂停所有发送": "Pause all sending",
+  "保存后拒绝新消息并暂停派发和渠道测试；已在发送的请求无法撤回。": "After saving, reject new messages and pause dispatch and channel tests. Requests already being sent cannot be recalled.",
+  "每日投递接收上限": "Daily accepted delivery limit",
+  "按渠道目标计数，每天 UTC 00:00 重置": "Counted per channel target; resets at 00:00 UTC daily",
+  "每个调用方每日上限": "Daily limit per caller",
+  "每个 API Key 独立计数；后台和 RPC 分别共享额度": "Each API key has its own quota; admin and RPC each share a separate quota",
+  "每个调用方每分钟上限": "Per-minute limit per caller",
+  "按渠道目标计数，按 UTC 自然分钟重置": "Counted per channel target; resets each UTC calendar minute",
+  "待处理投递上限": "Pending delivery limit",
+  "包含定时、排队和发送中的投递；达到上限拒绝新消息": "Includes scheduled, queued and sending deliveries; rejects new messages at the limit",
+  "每日执行预算": "Daily work budget",
+  "每次入队或发送尝试消耗 1 次；含重试和渠道测试，每天 UTC 重置": "Each enqueue or send attempt costs 1 unit, including retries and channel tests; resets daily at 00:00 UTC",
+  "发送已暂停或达到费用保护上限，请检查运行设置。": "Sending is paused or a cost protection limit was reached. Check runtime settings.",
+
   "清除 {%value0%}": "Clear {%value0%}",
   "撤销清除 {%value0%}": "Undo clearing {%value0%}",
   "撤销清除": "Undo clearing",

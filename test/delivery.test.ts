@@ -207,9 +207,9 @@ describe('maintenance', () => {
     const old = Date.now() - 3 * 86_400_000
     await env.DB.prepare(`INSERT INTO messages (id, source, payload, send_at, created_at) VALUES ('old', 'admin', '{}', ?, ?)`).bind(old, old).run()
     await env.DB.prepare(
-      `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, status, next_attempt_at, created_at, updated_at)
-       VALUES ('d-old', 'old', 'c', 'webhook', 'c', 'sent', ?, ?, ?)`,
-    ).bind(old, old, old).run()
+      `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, status, next_attempt_at, created_at, updated_at, deadline_at)
+       VALUES ('d-old', 'old', 'c', 'webhook', 'c', 'sent', ?, ?, ?, ?)`,
+    ).bind(old, old, old, old + 86400000).run()
     // Created long ago but scheduled for the future: kept.
     await env.DB.prepare(`INSERT INTO messages (id, source, payload, send_at, created_at) VALUES ('future', 'admin', '{}', ?, ?)`)
       .bind(Date.now() + 86_400_000, old).run()
@@ -231,14 +231,14 @@ describe('maintenance', () => {
         .bind(status, old, old).run()
       await env.DB.prepare(
         `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, status,
-           next_attempt_at, lease_until, created_at, updated_at)
-         VALUES (?, ?, 'c', 'webhook', 'c', ?, ?, ?, ?, ?)`,
-      ).bind(status, status, status, now + 86_400_000, now + 3600_000, old, old).run()
+           next_attempt_at, lease_until, created_at, updated_at, deadline_at)
+         VALUES (?, ?, 'c', 'webhook', 'c', ?, ?, ?, ?, ?, ?)`,
+      ).bind(status, status, status, now + 86_400_000, now + 3600_000, old, old, now + 2 * 86400000).run()
     }
     await env.DB.prepare(
-      `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, status, next_attempt_at, created_at, updated_at)
-       VALUES ('mixed', 'scheduled', 'c2', 'webhook', 'c2', 'sent', ?, ?, ?)`,
-    ).bind(old, old, old).run()
+      `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, status, next_attempt_at, created_at, updated_at, deadline_at)
+       VALUES ('mixed', 'scheduled', 'c2', 'webhook', 'c2', 'sent', ?, ?, ?, ?)`,
+    ).bind(old, old, old, old + 86400000).run()
 
     const report = await runMaintenance(envWithQueue().env, noWait, now)
     expect(report.purgedMessages).toBe(1)

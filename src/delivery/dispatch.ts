@@ -1,17 +1,10 @@
 import type { ExecutionMode } from '../shared/types'
-import { deliveryQueue, QUEUE_MAX_DELAY_S } from './mode'
 import { processDelivery, type WaitUntil } from './process'
 import { markScheduled } from './repo'
 import { DIRECT_BATCH_LIMIT } from './limits'
+import { enqueueDeliveries, type Dispatchable } from './queue'
 
-export interface Dispatchable {
-  id: string
-  /** Attempts already started (the claim's expected value). */
-  attempts: number
-  nextAttemptAt: number
-}
-
-const SEND_BATCH = 100
+export type { Dispatchable } from './queue'
 
 /**
  * Hand deliveries that are already `queued` in D1 to the executor. Queue mode
@@ -41,19 +34,5 @@ export async function dispatchQueued(
     )
     return
   }
-  const queue = deliveryQueue(env)!
-  for (let i = 0; i < items.length; i += SEND_BATCH) {
-    const chunk = items.slice(i, i + SEND_BATCH)
-    try {
-      await queue.sendBatch(
-        chunk.map((d) => ({
-          body: { deliveryId: d.id, attempt: d.attempts },
-          delaySeconds: Math.min(Math.max(0, Math.ceil((d.nextAttemptAt - now) / 1000)), QUEUE_MAX_DELAY_S),
-        })),
-      )
-    } catch (err) {
-      console.error('failed to enqueue deliveries; leaving them to the cron', err)
-      await markScheduled(env.DB, chunk.map((d) => d.id), Date.now())
-    }
-  }
+  await enqueueDeliveries(env, items, now)
 }

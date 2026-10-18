@@ -4,8 +4,10 @@ import { getProvider } from '../channels/registry'
 import type { OutboundMessage, SendOutcome } from '../channels/types'
 import { redact, redactResponse } from '../lib/redact'
 import type { RuntimeSettings } from '../shared/types'
-import { deliveryQueue, effectiveMode, QUEUE_MAX_DELAY_S, type DeliveryMessage } from './mode'
-import { claimDelivery, deferDelivery, finishDelivery, markScheduled, type ClaimedDelivery } from './repo'
+import { effectiveMode, type DeliveryMessage } from './mode'
+import { enqueueDeliveries } from './queue'
+import { parkDeliveries, safetyCode } from '../domain/safety'
+import { claimDelivery, deferDelivery, finishDelivery, type ClaimedDelivery } from './repo'
 
 /** Delay before attempt n+1 after n failed attempts (the last value repeats). */
 export const BACKOFF_SECONDS = [10, 30, 120, 600, 1800, 3600]
@@ -82,21 +84,21 @@ export async function settleAttempt(
   const status = mode === 'queue' ? 'queued' : 'scheduled'
   if (!(await deferDelivery(env.DB, d, status, now + delayMs, result, now))) return
   if (status === 'queued') {
-    try {
-      await deliveryQueue(env)!.send(
-        { deliveryId: d.id, attempt: d.attempts },
-        { delaySeconds: Math.min(Math.ceil(delayMs / 1000), QUEUE_MAX_DELAY_S) },
-      )
-    } catch (err) {
-      console.error('failed to enqueue retry; leaving it to the cron', d.id, err)
-      await markScheduled(env.DB, [d.id], Date.now())
-    }
+    await enqueueDeliveries(env, [{ id: d.id, attempts: d.attempts, nextAttemptAt: now + delayMs }], now)
   }
 }
 
 /** One attempt of one delivery. Throws only on infrastructure (D1) errors. */
 export async function processDelivery(env: CloudflareBindings, msg: DeliveryMessage, now = Date.now()): Promise<void> {
-  const claimed = await claimDelivery(env.DB, msg.deliveryId, msg.attempt, now)
+  let claimed
+  try {
+    claimed = await claimDelivery(env.DB, msg.deliveryId, msg.attempt, now)
+  } catch (err) {
+    const code = safetyCode(err)
+    if (!code) throw err
+    await parkDeliveries(env.DB, [{ id: msg.deliveryId, attempts: msg.attempt }], code, now)
+    return
+  }
   if (!claimed) return
   const outcome = await attemptDelivery(env, claimed)
   await settleAttempt(env, claimed, outcome, await getRuntimeSettings(env.DB))

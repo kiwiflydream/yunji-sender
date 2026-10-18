@@ -1,7 +1,7 @@
 import { dispatchQueued } from '../delivery/dispatch'
 import { effectiveMode, QUEUE_MAX_DELAY_S } from '../delivery/mode'
 import { processDelivery, settleAttempt, type WaitUntil } from '../delivery/process'
-import { expiredLeases } from '../delivery/repo'
+import { expiredLeases, expirePending } from '../delivery/repo'
 import { getRuntimeSettings } from '../domain/settings'
 import { DIRECT_BATCH_LIMIT, EXPIRED_LEASE_LIMIT, MAINTENANCE_SCAN_LIMIT } from '../delivery/limits'
 
@@ -39,13 +39,19 @@ export async function runMaintenance(
   const settings = await getRuntimeSettings(env.DB)
   const mode = await effectiveMode(env, settings)
 
+  await expirePending(env.DB, now, SCAN_LIMIT)
+
+  if (settings.sendingPaused) {
+    return { dispatched: 0, revived: 0, expiredLeases: 0, ...await purge(env.DB, settings, now) }
+  }
+
   const horizon = mode === 'queue' ? now + (QUEUE_MAX_DELAY_S - 60) * 1000 : now
   const { results: due } = await env.DB
     .prepare(
-      `SELECT id, attempts, next_attempt_at FROM deliveries WHERE status = 'scheduled' AND next_attempt_at <= ?
+      `SELECT id, attempts, next_attempt_at FROM deliveries WHERE status = 'scheduled' AND next_attempt_at <= ? AND dispatch_after <= ?
        ORDER BY next_attempt_at LIMIT ?`,
     )
-    .bind(horizon, mode === 'direct' ? DIRECT_BATCH_LIMIT : SCAN_LIMIT)
+    .bind(horizon, now, mode === 'direct' ? DIRECT_BATCH_LIMIT : SCAN_LIMIT)
     .all<{ id: string; attempts: number; next_attempt_at: number }>()
   let dispatched = 0
   if (mode === 'queue') {
@@ -76,7 +82,7 @@ export async function runMaintenance(
   const revived = await env.DB
     .prepare(
       `UPDATE deliveries SET status = 'scheduled', updated_at = ?
-       WHERE id IN (SELECT id FROM deliveries WHERE status = 'queued' AND next_attempt_at < ? LIMIT ?)`,
+       WHERE id IN (SELECT id FROM deliveries WHERE status = 'queued' AND MAX(next_attempt_at, COALESCE(last_dispatched_at, updated_at)) < ? LIMIT ?)`,
     )
     .bind(now, now - STALE_QUEUED_MS, SCAN_LIMIT)
     .run()
@@ -118,6 +124,8 @@ async function purge(db: D1Database, settings: { retentionDays: number; statsRet
     .run()
 
   const cutoff = now - settings.retentionDays * DAY_MS
+  // Keep current UTC day/minute buckets; historical quota counters are no longer needed.
+  await db.prepare('DELETE FROM usage_counters WHERE bucket < ?').bind(now - 2 * DAY_MS).run()
   let purgedMessages = 0
   for (let i = 0; i < MAX_PURGE_BATCHES; i++) {
     // Keep unfinished work even past retention (backlogs and manual retries).

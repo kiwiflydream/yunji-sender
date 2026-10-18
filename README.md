@@ -81,7 +81,7 @@ pnpm exec wrangler secret put ENCRYPTION_KEY
 pnpm run deploy
 ```
 
-此命令会依次运行类型检查、单元测试和构建，应用尚未执行的 D1 迁移，再发布 Worker。部署完成后，打开输出地址的 `/admin`，使用 `admin` 和刚设置的 `ADMIN_PASSWORD` 登录。
+此命令会依次运行类型检查、单元测试和构建，初始化 D1 表结构，再发布 Worker。部署完成后，打开输出地址的 `/admin`，使用 `admin` 和刚设置的 `ADMIN_PASSWORD` 登录。
 
 发布前的完整验证命令为 `pnpm check:release`，浏览器安装和验证范围见[本地开发](docs/development.md)。
 

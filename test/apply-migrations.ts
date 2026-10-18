@@ -10,7 +10,7 @@ const defaultTemplates = (await env.DB.prepare('SELECT * FROM message_templates'
 // D1 is isolated per file, not per test: reset state every test.
 beforeEach(async () => {
   await env.DB.batch(
-    ['deliveries', 'messages', 'channel_group_channels', 'channel_groups', 'channels', 'api_keys', 'settings', 'delivery_stats', 'message_templates'].map((t) =>
+    ['usage_counters', 'deliveries', 'messages', 'channel_group_channels', 'channel_groups', 'channels', 'api_keys', 'settings', 'delivery_stats', 'message_templates'].map((t) =>
       env.DB.prepare(`DELETE FROM ${t}`),
     ),
   )

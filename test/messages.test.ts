@@ -14,9 +14,9 @@ async function seedMessage(
     env.DB.prepare(`INSERT INTO messages (id, source, channel_group_slug, payload, send_at, created_at) VALUES (?, 'admin', ?, ?, ?, ?)`)
       .bind(id, channelGroup, JSON.stringify({ title: id, level: 'info' }), sendAt, createdAt),
     ...statuses.map((status, i) => env.DB.prepare(
-      `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, status, next_attempt_at, created_at, updated_at)
-       VALUES (?, ?, ?, 'webhook', 'hook', ?, ?, ?, ?)`,
-    ).bind(`${id}-${i}`, id, `ch-${i}`, status, sendAt, createdAt, createdAt)),
+      `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, status, next_attempt_at, created_at, updated_at, deadline_at)
+       VALUES (?, ?, ?, 'webhook', 'hook', ?, ?, ?, ?, ?)`,
+    ).bind(`${id}-${i}`, id, `ch-${i}`, status, sendAt, createdAt, createdAt, sendAt + 86400000)),
   ])
 }
 
@@ -48,15 +48,15 @@ describe('message pagination', () => {
     expect(second.nextBefore).toBeNull()
   })
 
-  it('keeps legacy timestamp cursors working and applies channelGroup filters before the limit', async () => {
+  it('applies channelGroup filters before the limit', async () => {
     await seedMessage('other', 3000, ['sent'], 'biz')
     await seedMessage('newer', 2000)
     await seedMessage('older', 1000)
     expect((await list('channelGroup=ops&limit=1')).messages.map((m) => m.id)).toEqual(['newer'])
-    expect((await list('before=2000')).messages.map((m) => m.id)).toEqual(['older'])
+    expect((await list('before=2000:newer')).messages.map((m) => m.id)).toEqual(['older'])
   })
 
-  it.each(['0', '-1', 'abc', '1000:', '1000:a:b', '9007199254740992'])('rejects invalid cursor %s', async (before) => {
+  it.each(['2000', '0', '-1', 'abc', '1000:', '1000:a:b', '9007199254740992'])('rejects invalid cursor %s', async (before) => {
     expect((await adminCall(`/messages?before=${encodeURIComponent(before)}`)).status).toBe(422)
   })
 })

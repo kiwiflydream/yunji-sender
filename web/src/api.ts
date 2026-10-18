@@ -120,6 +120,9 @@ export function errorMessage(err: unknown): string {
   if (err instanceof ApiError && err.issues.length) {
     return err.issues.map((issue) => issueMessage(issue.message)).join(getLocale() === 'en' ? '; ' : '；')
   }
+  if (err instanceof ApiError && err.body?.error === 'safety_limit') {
+    return tr('发送已暂停或达到费用保护上限，请检查运行设置。')
+  }
   const message = err instanceof Error ? err.message : String(err)
   const known: Record<string, string> = {
     unauthorized: '认证失败，请检查登录状态', forbidden: '没有操作权限', not_found: '资源不存在',

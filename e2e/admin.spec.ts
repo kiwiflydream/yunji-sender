@@ -1,6 +1,33 @@
 import { expect, test } from '@playwright/test'
 import { call, providerURL, seed } from './helpers'
-import type { Channel } from '../src/shared/types'
+import type { Channel, RuntimeSettings } from '../src/shared/types'
+
+test('cost protection settings persist and pause sending', async ({ page }, testInfo) => {
+  const english = testInfo.project.use.locale === 'en'
+  await page.addInitScript((locale) => localStorage.setItem('yunji-sender.locale', locale), english ? 'en' : 'zh-CN')
+  const { settings } = await call<{ settings: RuntimeSettings }>('/admin/api/settings/runtime')
+  const { channel } = await call<{ channel: Channel }>('/admin/api/channels', {
+    method: 'POST', status: 201, data: { name: 'Pause fixture', type: 'webhook', config: { url: `${providerURL}/ok` } },
+  })
+  try {
+    await page.goto('/admin/settings')
+    const pause = page.getByRole('switch', { name: english ? 'Pause all sending' : '暂停所有发送' })
+    await pause.click()
+    await page.getByLabel(english ? 'Daily work budget' : '每日执行预算', { exact: true }).fill('1234')
+    await page.getByRole('button', { name: english ? 'Save' : '保存', exact: true }).click()
+    await expect.poll(async () => (await call<{ settings: RuntimeSettings }>('/admin/api/settings/runtime')).settings.sendingPaused).toBe(true)
+    await page.reload()
+    await expect(pause).toBeChecked()
+    await expect(page.getByLabel(english ? 'Daily work budget' : '每日执行预算', { exact: true })).toHaveValue('1234')
+    expect(await call('/admin/api/send', { method: 'POST', status: 503, data: { channels: [channel.id], body: 'must not send' } }))
+      .toEqual({ error: 'safety_limit', reason: 'paused' })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false)
+    await pause.scrollIntoViewIfNeeded()
+    await page.screenshot({ path: testInfo.outputPath('cost-protection.png'), fullPage: true })
+  } finally {
+    await call('/admin/api/settings/runtime', { method: 'PUT', data: settings })
+  }
+})
 
 test('optional credentials can be cleared, undone and persisted', async ({ page }, testInfo) => {
   const english = testInfo.project.use.locale === 'en'

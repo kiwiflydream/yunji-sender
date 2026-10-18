@@ -1,3 +1,4 @@
+import { DEFAULT_RUNTIME_SETTINGS } from '../src/shared/types'
 import { env } from 'cloudflare:workers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { finishDelivery, claimDelivery } from '../src/delivery/repo'
@@ -168,18 +169,18 @@ describe('settings', () => {
   it('validates and saves runtime settings', async () => {
     const put = await adminCall('/settings/runtime', {
       method: 'PUT',
-      ...json({ executionMode: 'direct', maxAttempts: 3, retentionDays: 7, statsRetentionDays: 30 }),
+      ...json({ ...DEFAULT_RUNTIME_SETTINGS, executionMode: 'direct', maxAttempts: 3, retentionDays: 7, statsRetentionDays: 30 }),
     })
     expect(put.status).toBe(200)
     expect(((await (await adminCall('/me')).json()) as any).maxAttempts).toBe(3)
-    const bad = await adminCall('/settings/runtime', { method: 'PUT', ...json({ executionMode: 'direct', maxAttempts: 0, retentionDays: 7, statsRetentionDays: 30 }) })
+    const bad = await adminCall('/settings/runtime', { method: 'PUT', ...json({ ...DEFAULT_RUNTIME_SETTINGS, executionMode: 'direct', maxAttempts: 0, retentionDays: 7, statsRetentionDays: 30 }) })
     expect(bad.status).toBe(422)
   })
 
   it('refuses queue mode without the binding', async () => {
     const res = await adminCall(
       '/settings/runtime',
-      { method: 'PUT', ...json({ executionMode: 'queue', maxAttempts: 3, retentionDays: 7, statsRetentionDays: 30 }) },
+      { method: 'PUT', ...json({ ...DEFAULT_RUNTIME_SETTINGS, executionMode: 'queue', maxAttempts: 3, retentionDays: 7, statsRetentionDays: 30 }) },
       envWithoutQueue(),
     )
     expect(((await res.json()) as any).issues[0].path).toBe('executionMode')
@@ -194,9 +195,9 @@ describe('stats', () => {
       `INSERT INTO messages (id, channel_group_slug, source, payload, send_at, created_at) VALUES ('m1', 'ops', 'admin', '{}', ?, ?)`,
     ).bind(now - 5000, now - 5000).run()
     await env.DB.prepare(
-      `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, channel_group_slug, status, next_attempt_at, created_at, updated_at)
-       VALUES ('d1', 'm1', ?, 'webhook', 'hook', 'ops', 'queued', ?, ?, ?), ('d2', 'm1', ?, 'webhook', 'hook', 'ops', 'queued', ?, ?, ?)`,
-    ).bind(ch.id, now, now, now, ch.id, now, now, now).run()
+      `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, channel_group_slug, status, next_attempt_at, created_at, updated_at, deadline_at)
+       VALUES ('d1', 'm1', ?, 'webhook', 'hook', 'ops', 'queued', ?, ?, ?, ?), ('d2', 'm1', ?, 'webhook', 'hook', 'ops', 'queued', ?, ?, ?, ?)`,
+    ).bind(ch.id, now, now, now, now + 86400000, ch.id, now, now, now, now + 86400000).run()
     for (const [id, status] of [['d1', 'sent'], ['d2', 'failed']] as const) {
       const d = (await claimDelivery(env.DB, id, 0, now))!
       await finishDelivery(env.DB, d, status, { durationMs: 5, httpStatus: 200, responseBody: null, error: null }, now)

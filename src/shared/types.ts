@@ -188,6 +188,12 @@ export type AdminAuthMode = 'basic' | 'access'
 export type ExecutionMode = 'queue' | 'direct'
 
 export interface RuntimeSettings {
+  sendingPaused: boolean
+  dailyDeliveryLimit: number
+  perKeyDailyDeliveryLimit: number
+  perKeyMinuteLimit: number
+  maxPendingDeliveries: number
+  dailyWorkLimit: number
   executionMode: ExecutionMode
   /** Total attempts per delivery, the first included. */
   maxAttempts: number
@@ -196,6 +202,12 @@ export interface RuntimeSettings {
 }
 
 export const DEFAULT_RUNTIME_SETTINGS: RuntimeSettings = {
+  sendingPaused: false,
+  dailyDeliveryLimit: 1000,
+  perKeyDailyDeliveryLimit: 500,
+  perKeyMinuteLimit: 100,
+  maxPendingDeliveries: 1000,
+  dailyWorkLimit: 3000,
   executionMode: 'queue',
   maxAttempts: 5,
   retentionDays: 30,

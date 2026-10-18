@@ -11,8 +11,8 @@ async function outcome(sendAt: number, status: 'sent' | 'failed' = 'sent') {
   await env.DB.batch([
     env.DB.prepare("INSERT INTO messages (id, source, payload, send_at, created_at) VALUES (?, 'admin', '{}', ?, ?)").bind(id, sendAt, sendAt),
     env.DB.prepare(`INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, channel_group_slug,
-      status, next_attempt_at, created_at, updated_at) VALUES (?, ?, 'c', 'webhook', 'test', 'ops', 'queued', ?, ?, ?)`)
-      .bind(id, id, sendAt, sendAt, sendAt),
+      status, next_attempt_at, created_at, updated_at, deadline_at) VALUES (?, ?, 'c', 'webhook', 'test', 'ops', 'queued', ?, ?, ?, ?)`)
+      .bind(id, id, sendAt, sendAt, sendAt, sendAt + 86400000),
   ])
   const delivery = (await claimDelivery(env.DB, id, 0, sendAt))!
   await finishDelivery(env.DB, delivery, status, { durationMs: 1, httpStatus: 200, responseBody: null, error: null }, sendAt + 1000)

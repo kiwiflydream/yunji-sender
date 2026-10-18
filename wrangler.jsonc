@@ -3,6 +3,7 @@
   "name": "yunji-sender",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-16",
+  "limits": { "cpu_ms": 1000 },
   "observability": {
     "enabled": true
   },
@@ -38,6 +39,7 @@
         "max_batch_size": 5,
         "max_batch_timeout": 1,
         "max_retries": 3,
+        "max_concurrency": 2,
         "dead_letter_queue": "yunji-sender-deliveries-dlq"
       }
     ]
