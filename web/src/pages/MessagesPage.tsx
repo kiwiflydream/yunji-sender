@@ -1,3 +1,4 @@
+import { tr, useLocale } from '../i18n'
 import { Button, Empty, LayerCard, Link, Select, Table, Text } from '@cloudflare/kumo'
 import { PaperPlaneTiltIcon, TrayIcon } from '@phosphor-icons/react'
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
@@ -13,6 +14,7 @@ import { fmtRelative, fmtTime, MESSAGE_STATUS, SOURCE } from '../lib/format'
 const ALL = '__all__'
 
 export function MessagesPage() {
+  useLocale()
   const [filter, setFilter] = useState<MessageFilter>({})
   const [sending, setSending] = useState(false)
   const channelGroups = useQuery({ queryKey: ['channelGroups'], queryFn: api.channelGroups })
@@ -33,37 +35,35 @@ export function MessagesPage() {
   const filtered = !!(filter.status || filter.channelGroup)
 
   const sendButton = (
-    <Button variant="primary" icon={PaperPlaneTiltIcon} onClick={() => setSending(true)}>
-      发送消息
-    </Button>
+    <Button variant="primary" icon={PaperPlaneTiltIcon} onClick={() => setSending(true)}>{tr('发送消息')}</Button>
   )
 
   return (
     <>
-      <PageHeader title="消息" description="所有发送请求及其在各渠道的投递结果。" actions={sendButton} />
+      <PageHeader title={tr('消息')} description={tr('所有发送请求及其在各渠道的投递结果。')} actions={sendButton} />
       <div className="mb-4 flex flex-wrap gap-3">
         <Select
-          aria-label="状态"
+          aria-label={tr('状态')}
           className="w-36"
           value={filter.status ?? ALL}
           onValueChange={(v) => setFilter((f) => ({ ...f, status: v === ALL ? undefined : (v as MessageStatus) }))}
-          items={{ [ALL]: '全部状态', ...Object.fromEntries(Object.entries(MESSAGE_STATUS).map(([k, v]) => [k, v.label])) }}
+          items={{ [ALL]: tr('全部状态'), ...Object.fromEntries(Object.entries(MESSAGE_STATUS).map(([k, v]) => [k, tr(v.label)])) }}
         >
-          <Select.Option value={ALL}>全部状态</Select.Option>
+          <Select.Option value={ALL}>{tr('全部状态')}</Select.Option>
           {Object.entries(MESSAGE_STATUS).map(([k, v]) => (
             <Select.Option key={k} value={k}>
-              {v.label}
+              {tr(v.label)}
             </Select.Option>
           ))}
         </Select>
         <Select
-          aria-label="渠道组"
+          aria-label={tr('渠道组')}
           className="w-48"
           value={filter.channelGroup ?? ALL}
           onValueChange={(v) => setFilter((f) => ({ ...f, channelGroup: v === ALL ? undefined : String(v) }))}
-          items={{ [ALL]: '全部渠道组', ...Object.fromEntries((channelGroups.data ?? []).map((t) => [t.slug, t.slug])) }}
+          items={{ [ALL]: tr('全部渠道组'), ...Object.fromEntries((channelGroups.data ?? []).map((t) => [t.slug, t.slug])) }}
         >
-          <Select.Option value={ALL}>全部渠道组</Select.Option>
+          <Select.Option value={ALL}>{tr('全部渠道组')}</Select.Option>
           {(channelGroups.data ?? []).map((t) => (
             <Select.Option key={t.id} value={t.slug}>
               {t.slug}
@@ -79,8 +79,8 @@ export function MessagesPage() {
         <LayerCard className="py-12">
           <Empty
             icon={<TrayIcon size={48} className="text-kumo-inactive" />}
-            title={filtered ? '没有符合条件的消息' : '还没有消息'}
-            description={filtered ? '换个筛选条件试试。' : '通过 API、RPC 或这里的「发送消息」发出第一条通知。'}
+            title={filtered ? tr('没有符合条件的消息') : tr('还没有消息')}
+            description={filtered ? tr('换个筛选条件试试。') : tr('通过 API、RPC 或这里的「发送消息」发出第一条通知。')}
             contents={filtered ? undefined : sendButton}
           />
         </LayerCard>
@@ -89,24 +89,24 @@ export function MessagesPage() {
           <Table>
             <Table.Header>
               <Table.Row>
-                <Table.Head>时间</Table.Head>
-                <Table.Head>标题</Table.Head>
-                <Table.Head>渠道组</Table.Head>
-                <Table.Head className="text-right">送达</Table.Head>
-                <Table.Head>状态</Table.Head>
-                <Table.Head>来源</Table.Head>
+                <Table.Head>{tr('时间')}</Table.Head>
+                <Table.Head>{tr('标题')}</Table.Head>
+                <Table.Head>{tr('渠道组')}</Table.Head>
+                <Table.Head className="text-right">{tr('送达')}</Table.Head>
+                <Table.Head>{tr('状态')}</Table.Head>
+                <Table.Head>{tr('来源')}</Table.Head>
               </Table.Row>
             </Table.Header>
             <Table.Body>
               {rows.map((m) => (
                 <Table.Row key={m.id}>
                   <Table.Cell className="whitespace-nowrap" title={fmtTime(m.createdAt)}>
-                    {m.status === 'scheduled' ? `定时 ${fmtTime(m.sendAt)}` : fmtRelative(m.createdAt)}
+                    {m.status === 'scheduled' ? tr('定时 {%value0%}', { value0: fmtTime(m.sendAt) }) : fmtRelative(m.createdAt)}
                   </Table.Cell>
                   <Table.Cell className="max-w-80">
                     <div className="flex items-center gap-2">
                       <Link href={`/messages/${m.id}`} variant="plain" className="truncate font-medium">
-                        {m.title || <span className="text-kumo-subtle">（无标题）</span>}
+                        {m.title || <span className="text-kumo-subtle">{tr('（无标题）')}</span>}
                       </Link>
                       <LevelBadge level={m.level} />
                     </div>
@@ -124,7 +124,7 @@ export function MessagesPage() {
                   </Table.Cell>
                   <Table.Cell>
                     <Text size="sm" variant="secondary">
-                      {SOURCE[m.source]}
+                      {tr(SOURCE[m.source])}
                     </Text>
                   </Table.Cell>
                 </Table.Row>
@@ -133,9 +133,7 @@ export function MessagesPage() {
           </Table>
           {messages.hasNextPage && (
             <div className="flex justify-center border-t border-kumo-hairline p-3">
-              <Button variant="ghost" loading={messages.isFetchingNextPage} onClick={() => messages.fetchNextPage()}>
-                加载更多
-              </Button>
+              <Button variant="ghost" loading={messages.isFetchingNextPage} onClick={() => messages.fetchNextPage()}>{tr('加载更多')}</Button>
             </div>
           )}
         </LayerCard>

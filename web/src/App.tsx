@@ -1,4 +1,4 @@
-import { LinkProvider, type LinkComponentProps, Toasty, TooltipProvider } from '@cloudflare/kumo'
+import { KumoLocaleProvider, LinkProvider, type LinkComponentProps, Toasty, TooltipProvider } from '@cloudflare/kumo'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { forwardRef, lazy, Suspense, useEffect } from 'react'
 import { Link as RouterLink, Route, Router, Switch as Routes } from 'wouter'
@@ -13,6 +13,7 @@ import { SettingsPage } from './pages/SettingsPage'
 import { ChannelGroupsPage } from './pages/ChannelGroupsPage'
 import { TemplatesPage } from './pages/TemplatesPage'
 import { TemplateFormPage } from './pages/TemplateFormPage'
+import { tr, useLocale } from './i18n'
 
 // Charts pull in ECharts; keep them out of the main bundle.
 const StatsPage = lazy(() => import('./pages/StatsPage'))
@@ -38,47 +39,50 @@ function useSystemColorMode() {
 }
 
 export function App() {
+  useLocale()
   useSystemColorMode()
   return (
-    <QueryClientProvider client={queryClient}>
-      <Router base="/admin">
-        <LinkProvider component={AppLink}>
-          <TooltipProvider>
-            <Toasty>
-              <AppShell>
-                <Routes>
-                  <Route path="/" component={MessagesPage} />
-                  <Route path="/messages/:id">{(p) => <MessageDetailPage id={p.id} />}</Route>
-                  <Route path="/channels" component={ChannelsPage} />
-                  <Route path="/channels/new">{() => <ChannelFormPage />}</Route>
-                  <Route path="/channels/:id">{(p) => <ChannelFormPage id={p.id} />}</Route>
-                  <Route path="/channel-groups" component={ChannelGroupsPage} />
-                  <Route path="/templates" component={TemplatesPage} />
-                  <Route path="/templates/new">{() => <TemplateFormPage />}</Route>
-                  <Route path="/templates/:id">{(p) => <TemplateFormPage id={p.id} />}</Route>
-                  <Route path="/keys" component={KeysPage} />
-                  <Route path="/api-docs">
-                    {() => (
-                      <Suspense fallback={<PageLoader />}>
-                        <ApiDocsPage />
-                      </Suspense>
-                    )}
-                  </Route>
-                  <Route path="/stats">
-                    {() => (
-                      <Suspense fallback={<PageLoader />}>
-                        <StatsPage />
-                      </Suspense>
-                    )}
-                  </Route>
-                  <Route path="/settings" component={SettingsPage} />
-                  <Route component={NotFound} />
-                </Routes>
-              </AppShell>
-            </Toasty>
-          </TooltipProvider>
-        </LinkProvider>
-      </Router>
-    </QueryClientProvider>
+    <KumoLocaleProvider translations={{ layerDialog: { close: tr('关闭'), cancel: tr('取消') } }}>
+      <QueryClientProvider client={queryClient}>
+        <Router base="/admin">
+          <LinkProvider component={AppLink}>
+            <TooltipProvider>
+              <Toasty>
+                <AppShell>
+                  <Routes>
+                    <Route path="/" component={MessagesPage} />
+                    <Route path="/messages/:id">{(p) => <MessageDetailPage id={p.id} />}</Route>
+                    <Route path="/channels" component={ChannelsPage} />
+                    <Route path="/channels/new">{() => <ChannelFormPage />}</Route>
+                    <Route path="/channels/:id">{(p) => <ChannelFormPage id={p.id} />}</Route>
+                    <Route path="/channel-groups" component={ChannelGroupsPage} />
+                    <Route path="/templates" component={TemplatesPage} />
+                    <Route path="/templates/new">{() => <TemplateFormPage />}</Route>
+                    <Route path="/templates/:id">{(p) => <TemplateFormPage id={p.id} />}</Route>
+                    <Route path="/keys" component={KeysPage} />
+                    <Route path="/api-docs">
+                      {() => (
+                        <Suspense fallback={<PageLoader />}>
+                          <ApiDocsPage />
+                        </Suspense>
+                      )}
+                    </Route>
+                    <Route path="/stats">
+                      {() => (
+                        <Suspense fallback={<PageLoader />}>
+                          <StatsPage />
+                        </Suspense>
+                      )}
+                    </Route>
+                    <Route path="/settings" component={SettingsPage} />
+                    <Route component={NotFound} />
+                  </Routes>
+                </AppShell>
+              </Toasty>
+            </TooltipProvider>
+          </LinkProvider>
+        </Router>
+      </QueryClientProvider>
+    </KumoLocaleProvider>
   )
 }

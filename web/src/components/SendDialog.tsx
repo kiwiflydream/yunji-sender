@@ -1,3 +1,4 @@
+import { tr, useLocale } from '../i18n'
 import {
   Banner,
   Button,
@@ -17,13 +18,14 @@ import { useState } from 'react'
 import { useLocation } from 'wouter'
 import { zonedTimeToEpoch } from '../../../src/lib/time'
 import type { MessageFormat, MessageLevel, SendRequest, TemplateVariables } from '../../../src/shared/types'
-import { api, ApiError, errorMessage } from '../api'
+import { api, ApiError, errorMessage, issueMessage } from '../api'
 import { LEVEL, viewerTimezone } from '../lib/format'
 import { TemplatePreview } from './TemplatePreview'
 
 type Target = 'channelGroup' | 'channels'
 
 export function SendDialog({ onClose }: { onClose: () => void }) {
+  useLocale()
   const [mode, setMode] = useState<'custom' | 'template'>('custom')
   const templates = useQuery({ queryKey: ['templates'], queryFn: api.templates, enabled: mode === 'template' })
   const [templateId, setTemplateId] = useState('')
@@ -42,7 +44,7 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
   const [tags, setTags] = useState<string[]>([])
   const [sendAt, setSendAt] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Error | string | null>(null)
   const toasts = useKumoToastManager()
   const qc = useQueryClient()
   const [, navigate] = useLocation()
@@ -58,7 +60,7 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
       return api.send(input)
     },
     onSuccess: (result) => {
-      toasts.add({ title: `已提交，投递到 ${result.deliveries.length} 个渠道`, variant: 'success' })
+      toasts.add({ title: tr('已提交，投递到 {%value0%} 个渠道', { value0: result.deliveries.length, count: result.deliveries.length }), variant: 'success' })
       qc.invalidateQueries({ queryKey: ['messages'] })
       onClose()
       navigate(`/messages/${result.messageId}`)
@@ -67,19 +69,26 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
       const fields: Record<string, string> = {}
       if (err instanceof ApiError) for (const i of err.issues) fields[i.path || 'other'] = i.message
       setErrors(fields)
-      setError(Object.keys(fields).length ? null : errorMessage(err))
+      setError(Object.keys(fields).length ? null : err)
     },
   })
 
   const enabledChannels = channels.data?.filter((c) => c.enabled) ?? []
   const selectedTemplate = templates.data?.find((t) => t.id === templateId)
   const hasDefaults = !!(selectedTemplate?.channelGroup || selectedTemplate?.channels.length)
-  const err = (path: string) => (errors[path] ? { error: errors[path] } : {})
+  const defaultTargets = [
+    selectedTemplate?.channelGroup ? tr('渠道组 {%value0%}', { value0: selectedTemplate.channelGroup }) : '',
+    selectedTemplate?.channels.length ? tr('{%value0%} 个渠道', { value0: selectedTemplate.channels.length, count: selectedTemplate.channels.length }) : '',
+  ].filter(Boolean)
+  const defaultSummary = defaultTargets.length === 2
+    ? tr('{%value0%} 和 {%value1%}', { value0: defaultTargets[0], value1: defaultTargets[1] })
+    : defaultTargets[0] ?? ''
+  const err = (path: string) => (errors[path] ? { error: issueMessage(errors[path]) } : {})
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog size="lg" className="max-h-[90svh] overflow-y-auto p-6">
-        <Dialog.Title className="text-lg font-semibold">发送消息</Dialog.Title>
+        <Dialog.Title className="text-lg font-semibold">{tr('发送消息')}</Dialog.Title>
         <form
           className="mt-4 flex flex-col gap-4"
           noValidate
@@ -89,13 +98,13 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
           }}
         >
           <Tabs variant="segmented" value={mode} onValueChange={(v) => { setMode(v as 'custom' | 'template'); setErrors({}); setError(null) }}
-            tabs={[{ value: 'custom', label: '自定义消息' }, { value: 'template', label: '使用模板' }]} />
+            tabs={[{ value: 'custom', label: tr('自定义消息') }, { value: 'template', label: tr('使用模板') }]} />
           {mode === 'template' && (
             <>
               {templates.isError && <Banner variant="error" description={errorMessage(templates.error)} />}
-              <Select label="消息模板" placeholder={templates.isPending ? '正在加载模板…' : templates.data?.length ? '选择模板' : '还没有模板'}
+              <Select label={tr('消息模板')} placeholder={templates.isPending ? tr('正在加载模板…') : templates.data?.length ? tr('选择模板') : tr('还没有模板')}
                 value={templateId || null} items={Object.fromEntries((templates.data ?? []).map((t) => [t.id, t.name]))}
-                onValueChange={(v) => { setTemplateId(String(v ?? '')); setVariables({}); setUseDefaults(true); setTarget('channels'); setErrors({}); setError(null) }} error={errors.templateId}>
+                onValueChange={(v) => { setTemplateId(String(v ?? '')); setVariables({}); setUseDefaults(true); setTarget('channels'); setErrors({}); setError(null) }} error={issueMessage(errors.templateId)}>
                 {(templates.data ?? []).map((t) => <Select.Option key={t.id} value={t.id}>{t.name}</Select.Option>)}
               </Select>
               {selectedTemplate && <TemplatePreview content={selectedTemplate} values={variables} onChange={(next) => {
@@ -109,9 +118,9 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
                 })
               }} errors={errors} />}
               {hasDefaults && (
-                <Switch label="使用模板默认发送目标" checked={useDefaults} onCheckedChange={setUseDefaults} />
+                <Switch label={tr('使用模板默认发送目标')} checked={useDefaults} onCheckedChange={setUseDefaults} />
               )}
-              {hasDefaults && useDefaults && <Text size="sm" variant="secondary">发送到模板预设的{selectedTemplate?.channelGroup ? `渠道组 ${selectedTemplate.channelGroup}` : ''}{selectedTemplate?.channelGroup && selectedTemplate.channels.length ? ' 和 ' : ''}{selectedTemplate?.channels.length ? `${selectedTemplate.channels.length} 个渠道` : ''}。</Text>}
+              {hasDefaults && useDefaults && <Text size="sm" variant="secondary">{tr('发送到模板预设的{%value0%}。', { value0: defaultSummary })}</Text>}
             </>
           )}
           {(mode === 'custom' || (selectedTemplate && (!useDefaults || !hasDefaults))) && <>
@@ -120,14 +129,14 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
             value={target}
             onValueChange={(v) => setTarget(v as Target)}
             tabs={[
-              { value: 'channelGroup', label: '按渠道组' },
-              { value: 'channels', label: '指定渠道' },
+              { value: 'channelGroup', label: tr('按渠道组') },
+              { value: 'channels', label: tr('指定渠道') },
             ]}
           />
           {target === 'channelGroup' ? (
             <Select
-              label="渠道组"
-              placeholder={channelGroups.data?.length === 0 ? '还没有渠道组' : '选择渠道组'}
+              label={tr('渠道组')}
+              placeholder={channelGroups.data?.length === 0 ? tr('还没有渠道组') : tr('选择渠道组')}
               value={channelGroup || null}
               onValueChange={(v) => setChannelGroup(String(v ?? ''))}
               items={Object.fromEntries((channelGroups.data ?? []).map((t) => [t.slug, `${t.name}（${t.slug}）`]))}
@@ -135,14 +144,13 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
             >
               {(channelGroups.data ?? []).map((t) => (
                 <Select.Option key={t.id} value={t.slug}>
-                  {t.name}（{t.slug}）
-                </Select.Option>
+                  {t.name}{tr('（')}{t.slug}{tr('）')}</Select.Option>
               ))}
             </Select>
           ) : enabledChannels.length === 0 ? (
-            <Text variant="secondary">没有启用的渠道。</Text>
+            <Text variant="secondary">{tr('没有启用的渠道。')}</Text>
           ) : (
-            <Checkbox.Group legend="渠道" value={channelIds} onValueChange={setChannelIds} error={errors.channels}>
+            <Checkbox.Group legend={tr('渠道')} value={channelIds} onValueChange={setChannelIds} error={issueMessage(errors.channels)}>
               {enabledChannels.map((c) => (
                 <Checkbox.Item key={c.id} value={c.id} label={c.name} />
               ))}
@@ -153,53 +161,53 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
           {mode === 'template' && errors.channelGroup && <Banner variant="error" description={errors.channelGroup} />}
           {mode === 'template' && (errors.title || errors.body) && <Banner variant="error" description={errors.title || errors.body} />}
           {mode === 'custom' && <>
-          <Input label="标题" value={title} onChange={(e) => setTitle(e.target.value)} {...err('title')} />
-          <InputArea label="正文" rows={4} value={body} onChange={(e) => setBody(e.target.value)} {...err('body')} />
+          <Input label={tr('标题')} value={title} onChange={(e) => setTitle(e.target.value)} {...err('title')} />
+          <InputArea label={tr('正文')} rows={4} value={body} onChange={(e) => setBody(e.target.value)} {...err('body')} />
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <Text size="sm" bold>
-                格式
-              </Text>
+              <Text size="sm" bold>{tr('格式')}</Text>
               <Tabs
                 variant="segmented"
                 value={format}
                 onValueChange={(v) => setFormat(v as MessageFormat)}
                 tabs={[
-                  { value: 'text', label: '纯文本' },
+                  { value: 'text', label: tr('纯文本') },
                   { value: 'markdown', label: 'Markdown' },
                 ]}
               />
             </div>
             <Select
-              label="级别"
+              label={tr('级别')}
               value={level}
               onValueChange={(v) => setLevel(v as MessageLevel)}
-              items={{ info: LEVEL.info.label, warn: LEVEL.warn.label, error: LEVEL.error.label }}
+              items={{ info: tr(LEVEL.info.label), warn: tr(LEVEL.warn.label), error: tr(LEVEL.error.label) }}
             >
-              <Select.Option value="info">{LEVEL.info.label}</Select.Option>
-              <Select.Option value="warn">{LEVEL.warn.label}</Select.Option>
-              <Select.Option value="error">{LEVEL.error.label}</Select.Option>
+              <Select.Option value="info">{tr(LEVEL.info.label)}</Select.Option>
+              <Select.Option value="warn">{tr(LEVEL.warn.label)}</Select.Option>
+              <Select.Option value="error">{tr(LEVEL.error.label)}</Select.Option>
             </Select>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input label="链接（可选）" placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} {...err('url')} />
-            <TagInput label="标签（可选）" value={tags} onValueChange={setTags} maxValues={10} />
+            <Input label={tr('链接（可选）')} placeholder="https://" value={url} onChange={(e) => setUrl(e.target.value)} {...err('url')} />
+            <TagInput label={tr('标签（可选）')} labels={{
+              input: tr('添加标签'), removeValue: (value) => tr('移除 {%value0%}', { value0: value }),
+              invalidValue: (value) => tr('无效的标签：{%value0%}', { value0: value }),
+              maxValuesReached: (value) => tr('最多允许 {%value0%} 个标签', { value0: value }),
+            }} value={tags} onValueChange={setTags} maxValues={10} />
           </div>
           </>}
           <Input
-            label="定时发送（可选）"
+            label={tr('定时发送（可选）')}
             type="datetime-local"
-            description={`按 ${viewerTimezone} 时间；留空立即发送`}
+            description={tr('按 {%value0%} 时间；留空立即发送', { value0: viewerTimezone })}
             value={sendAt}
             onChange={(e) => setSendAt(e.target.value)}
             {...err('sendAt')}
           />
-          {(error || errors.other) && <Banner variant="error" size="sm" description={error ?? errors.other} />}
+          {(error || errors.other) && <Banner variant="error" size="sm" description={error ? errorMessage(error) : issueMessage(errors.other)} />}
           <div className="flex justify-end gap-2">
-            <Dialog.Close render={(p) => <Button {...p}>取消</Button>} />
-            <Button type="submit" variant="primary" loading={send.isPending} disabled={mode === 'template' && !selectedTemplate}>
-              发送
-            </Button>
+            <Dialog.Close render={(p) => <Button {...p}>{tr('取消')}</Button>} />
+            <Button type="submit" variant="primary" loading={send.isPending} disabled={mode === 'template' && !selectedTemplate}>{tr('发送')}</Button>
           </div>
         </form>
       </Dialog>

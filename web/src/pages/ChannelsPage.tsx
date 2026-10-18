@@ -1,3 +1,4 @@
+import { tr, useLocale } from '../i18n'
 import { Badge, Button, Empty, LayerCard, Link, LinkButton, Table, Text, useKumoToastManager } from '@cloudflare/kumo'
 import { PaperPlaneRightIcon, PlugsConnectedIcon, PlusIcon } from '@phosphor-icons/react'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -11,24 +12,23 @@ import { TestResultBanner } from '../components/TestResult'
 import { fmtTime } from '../lib/format'
 
 export function ChannelsPage() {
+  useLocale()
   const channels = useQuery({ queryKey: ['channels'], queryFn: api.channels })
   const [result, setResult] = useState<{ name: string; result: ChannelTestResult } | null>(null)
   const toasts = useKumoToastManager()
   const test = useMutation({
     mutationFn: (c: { id: string; name: string }) => api.testChannel(c.id).then((r) => ({ name: c.name, result: r })),
     onSuccess: setResult,
-    onError: (err) => toasts.add({ title: '测试失败', description: errorMessage(err), variant: 'error' }),
+    onError: (err) => toasts.add({ title: tr('测试失败'), description: errorMessage(err), variant: 'error' }),
   })
 
   const addButton = (
-    <LinkButton variant="primary" icon={PlusIcon} href="/channels/new">
-      添加渠道
-    </LinkButton>
+    <LinkButton variant="primary" icon={PlusIcon} href="/channels/new">{tr('添加渠道')}</LinkButton>
   )
 
   return (
     <>
-      <PageHeader title="渠道" description="消息投递的目标：Webhook、IM 机器人、推送和邮件。凭证加密保存。" actions={addButton} />
+      <PageHeader title={tr('渠道')} description={tr('消息投递的目标：Webhook、IM 机器人、推送和邮件。凭证加密保存。')} actions={addButton} />
       {result && (
         <div className="mb-4">
           <TestResultBanner result={result.result} />
@@ -42,8 +42,8 @@ export function ChannelsPage() {
         <LayerCard className="py-12">
           <Empty
             icon={<PlugsConnectedIcon size={48} className="text-kumo-inactive" />}
-            title="还没有渠道"
-            description="先添加一个渠道，再把它绑定到渠道组。"
+            title={tr('还没有渠道')}
+            description={tr('先添加一个渠道，再把它绑定到渠道组。')}
             contents={addButton}
           />
         </LayerCard>
@@ -52,11 +52,11 @@ export function ChannelsPage() {
           <Table>
             <Table.Header>
               <Table.Row>
-                <Table.Head>名称</Table.Head>
-                <Table.Head>类型</Table.Head>
-                <Table.Head>状态</Table.Head>
-                <Table.Head>渠道组</Table.Head>
-                <Table.Head>更新时间</Table.Head>
+                <Table.Head>{tr('名称')}</Table.Head>
+                <Table.Head>{tr('类型')}</Table.Head>
+                <Table.Head>{tr('状态')}</Table.Head>
+                <Table.Head>{tr('渠道组')}</Table.Head>
+                <Table.Head>{tr('更新时间')}</Table.Head>
                 <Table.Head className="w-24" />
               </Table.Row>
             </Table.Header>
@@ -84,9 +84,7 @@ export function ChannelsPage() {
                         ))}
                       </div>
                     ) : (
-                      <Text size="sm" variant="secondary">
-                        未绑定
-                      </Text>
+                      <Text size="sm" variant="secondary">{tr('未绑定')}</Text>
                     )}
                   </Table.Cell>
                   <Table.Cell className="whitespace-nowrap">{fmtTime(c.updatedAt)}</Table.Cell>
@@ -98,9 +96,7 @@ export function ChannelsPage() {
                         icon={PaperPlaneRightIcon}
                         loading={test.isPending && test.variables?.id === c.id}
                         onClick={() => test.mutate(c)}
-                      >
-                        测试
-                      </Button>
+                      >{tr('测试')}</Button>
                     </div>
                   </Table.Cell>
                 </Table.Row>

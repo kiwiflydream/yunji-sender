@@ -18,7 +18,11 @@ import type {
   StatsRange,
   ChannelGroup,
 } from '../../src/shared/types'
+import { getLocale, tr } from './i18n'
+import { localizeIssue } from './lib/issue-message'
 import { viewerTimezone } from './lib/format'
+
+export const issueMessage = (message: string | undefined) => localizeIssue(message, tr)
 
 export class ApiError extends Error {
   constructor(
@@ -111,4 +115,16 @@ export const api = {
     request<{ settings: RuntimeSettings }>('/settings/runtime', json('PUT', settings)).then((r) => r.settings),
 }
 
-export const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err))
+export function errorMessage(err: unknown): string {
+  if (err instanceof ApiError && err.issues.length) {
+    return err.issues.map((issue) => issueMessage(issue.message)).join(getLocale() === 'en' ? '; ' : '；')
+  }
+  const message = err instanceof Error ? err.message : String(err)
+  const known: Record<string, string> = {
+    unauthorized: '认证失败，请检查登录状态', forbidden: '没有操作权限', not_found: '资源不存在',
+    validation_failed: '请检查输入内容', internal_error: '服务器错误，请稍后重试',
+    'Failed to fetch': '网络请求失败，请稍后重试', 'Load failed': '网络请求失败，请稍后重试',
+    'Invalid input': '输入不符合要求',
+  }
+  return known[message] ? tr(known[message]) : issueMessage(message) ?? message
+}

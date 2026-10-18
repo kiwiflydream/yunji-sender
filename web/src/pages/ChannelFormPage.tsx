@@ -1,3 +1,4 @@
+import { tr, useLocale } from '../i18n'
 import {
   Banner,
   Button,
@@ -5,7 +6,6 @@ import {
   InputArea,
   LayerCard,
   Select,
-  SensitiveInput,
   Switch,
   Text,
   useKumoToastManager,
@@ -16,13 +16,15 @@ import { useState } from 'react'
 import { useLocation } from 'wouter'
 import { CHANNEL_CATALOG, type ChannelField } from '../../../src/shared/catalog'
 import { CHANNEL_TYPES, type Channel, type ChannelConfigValue, type ChannelTestResult, type ChannelType } from '../../../src/shared/types'
-import { api, ApiError, errorMessage } from '../api'
+import { api, ApiError, errorMessage, issueMessage } from '../api'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { PageHeader } from '../components/PageHeader'
 import { ErrorBanner, NotFound, PageLoader } from '../components/States'
+import { SecretInput } from '../components/SecretInput'
 import { TestResultBanner } from '../components/TestResult'
 
 export function ChannelFormPage({ id }: { id?: string }) {
+  useLocale()
   const channel = useQuery({ queryKey: ['channel', id], queryFn: () => api.channel(id!), enabled: !!id })
   if (!id) return <ChannelForm />
   if (channel.isPending) return <PageLoader />
@@ -37,18 +39,26 @@ function defaults(type: ChannelType): Record<string, ChannelConfigValue> {
 }
 
 function ChannelForm({ initial }: { initial?: Channel }) {
+  useLocale()
   const [type, setType] = useState<ChannelType>(initial?.type ?? 'webhook')
   const [name, setName] = useState(initial?.name ?? '')
   const [enabled, setEnabled] = useState(initial?.enabled ?? true)
   const [config, setConfig] = useState<Record<string, ChannelConfigValue>>(() => ({ ...defaults(type), ...initial?.config }))
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Error | string | null>(null)
   const [testResult, setTestResult] = useState<ChannelTestResult | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [, navigate] = useLocation()
   const toasts = useKumoToastManager()
   const qc = useQueryClient()
-  const info = CHANNEL_CATALOG[type]
+  const source = CHANNEL_CATALOG[type]
+  const info = {
+    ...source, label: tr(source.label), description: tr(source.description),
+    fields: source.fields.map((field) => ({
+      ...field, label: tr(field.label),
+      placeholder: field.placeholder && tr(field.placeholder), help: field.help && tr(field.help),
+    })),
+  }
 
   const save = useMutation({
     mutationFn: () => {
@@ -56,7 +66,7 @@ function ChannelForm({ initial }: { initial?: Channel }) {
       return initial ? api.updateChannel(initial.id, input) : api.createChannel(input)
     },
     onSuccess: (saved) => {
-      toasts.add({ title: initial ? '渠道已保存' : '渠道已添加', variant: 'success' })
+      toasts.add({ title: initial ? tr('渠道已保存') : tr('渠道已添加'), variant: 'success' })
       qc.invalidateQueries({ queryKey: ['channels'] })
       qc.setQueryData(['channel', saved.id], saved)
       navigate(initial ? '/channels' : `/channels/${saved.id}`)
@@ -65,23 +75,23 @@ function ChannelForm({ initial }: { initial?: Channel }) {
       const fields: Record<string, string> = {}
       if (err instanceof ApiError) for (const i of err.issues) fields[i.path] = i.message
       setErrors(fields)
-      setError(Object.keys(fields).length ? '保存失败，请检查标出的字段。' : errorMessage(err))
+      setError(Object.keys(fields).length ? '保存失败，请检查标出的字段。' : err)
     },
   })
   const test = useMutation({
     mutationFn: () => api.testChannel(initial!.id),
     onSuccess: setTestResult,
-    onError: (err) => toasts.add({ title: '测试失败', description: errorMessage(err), variant: 'error' }),
+    onError: (err) => toasts.add({ title: tr('测试失败'), description: errorMessage(err), variant: 'error' }),
   })
   const remove = useMutation({
     mutationFn: () => api.deleteChannel(initial!.id),
     onSuccess: () => {
-      toasts.add({ title: '渠道已删除', variant: 'success' })
+      toasts.add({ title: tr('渠道已删除'), variant: 'success' })
       qc.invalidateQueries({ queryKey: ['channels'] })
       qc.invalidateQueries({ queryKey: ['channelGroups'] })
       navigate('/channels')
     },
-    onError: (err) => toasts.add({ title: '删除失败', description: errorMessage(err), variant: 'error' }),
+    onError: (err) => toasts.add({ title: tr('删除失败'), description: errorMessage(err), variant: 'error' }),
   })
 
   const changeType = (next: ChannelType) => {
@@ -93,17 +103,13 @@ function ChannelForm({ initial }: { initial?: Channel }) {
   return (
     <>
       <PageHeader
-        crumbs={[{ label: '渠道', href: '/channels' }, { label: initial ? initial.name : '添加' }]}
-        title={initial ? initial.name : '添加渠道'}
+        crumbs={[{ label: tr('渠道'), href: '/channels' }, { label: initial ? initial.name : tr('添加') }]}
+        title={initial ? initial.name : tr('添加渠道')}
         actions={
           initial && (
             <>
-              <Button icon={PaperPlaneRightIcon} loading={test.isPending} onClick={() => test.mutate()}>
-                发送测试消息
-              </Button>
-              <Button variant="ghost" icon={TrashIcon} onClick={() => setDeleting(true)}>
-                删除
-              </Button>
+              <Button icon={PaperPlaneRightIcon} loading={test.isPending} onClick={() => test.mutate()}>{tr('发送测试消息')}</Button>
+              <Button variant="ghost" icon={TrashIcon} onClick={() => setDeleting(true)}>{tr('删除')}</Button>
             </>
           )
         }
@@ -122,34 +128,32 @@ function ChannelForm({ initial }: { initial?: Channel }) {
         }}
       >
         <LayerCard>
-          <LayerCard.Secondary>基本信息</LayerCard.Secondary>
+          <LayerCard.Secondary>{tr('基本信息')}</LayerCard.Secondary>
           <LayerCard.Primary className="flex flex-col gap-4">
             <Select
-              label="类型"
+              label={tr('类型')}
               value={type}
               disabled={!!initial}
-              description={initial ? '类型创建后不能修改。' : info.description}
+              description={initial ? tr('类型创建后不能修改。') : info.description}
               onValueChange={(v) => changeType(v as ChannelType)}
-              items={Object.fromEntries(CHANNEL_TYPES.map((t) => [t, CHANNEL_CATALOG[t].label]))}
+              items={Object.fromEntries(CHANNEL_TYPES.map((t) => [t, tr(CHANNEL_CATALOG[t].label)]))}
             >
               {CHANNEL_TYPES.map((t) => (
                 <Select.Option key={t} value={t}>
-                  {CHANNEL_CATALOG[t].label}
+                  {tr(CHANNEL_CATALOG[t].label)}
                 </Select.Option>
               ))}
             </Select>
-            <Input label="名称" value={name} onChange={(e) => setName(e.target.value)} {...(errors.name ? { error: errors.name } : {})} />
-            <Switch label="启用" checked={enabled} onCheckedChange={setEnabled} />
+            <Input label={tr('名称')} value={name} onChange={(e) => setName(e.target.value)} error={issueMessage(errors.name)} />
+            <Switch label={tr('启用')} checked={enabled} onCheckedChange={setEnabled} />
           </LayerCard.Primary>
         </LayerCard>
         <LayerCard>
           <LayerCard.Secondary>
             <div className="flex flex-col">
-              <span>{info.label} 配置</span>
+              <span>{tr('{%value0%} 配置', { value0: info.label })}</span>
               <Text size="xs" variant="secondary">
-                {info.markdown === 'native' ? 'Markdown 原样发送。' : info.markdown === 'converted' ? 'Markdown 自动转换为该渠道支持的格式。' : 'Markdown 以纯文本发送。'}
-                带锁图标的字段加密保存，编辑时留空表示不修改。
-              </Text>
+                {info.markdown === 'native' ? tr('Markdown 原样发送。') : info.markdown === 'converted' ? tr('Markdown 自动转换为该渠道支持的格式。') : tr('Markdown 以纯文本发送。')}{' '}{tr('带锁图标的字段加密保存，编辑时留空表示不修改。')}</Text>
             </div>
           </LayerCard.Secondary>
           <LayerCard.Primary className="flex flex-col gap-4">
@@ -159,26 +163,24 @@ function ChannelForm({ initial }: { initial?: Channel }) {
                 field={f}
                 value={config[f.key]}
                 isSet={initial?.secretsSet.includes(f.key) ?? false}
-                error={errors[`config.${f.key}`]}
+                error={issueMessage(errors[`config.${f.key}`])}
                 onChange={(v) => setConfig((c) => ({ ...c, [f.key]: v }))}
               />
             ))}
           </LayerCard.Primary>
         </LayerCard>
-        {error && <Banner variant="error" description={error} />}
+        {error && <Banner variant="error" description={errorMessage(error)} />}
         <div className="flex justify-end gap-2">
-          <Button onClick={() => navigate('/channels')}>取消</Button>
-          <Button type="submit" variant="primary" loading={save.isPending}>
-            保存
-          </Button>
+          <Button onClick={() => navigate('/channels')}>{tr('取消')}</Button>
+          <Button type="submit" variant="primary" loading={save.isPending}>{tr('保存')}</Button>
         </div>
       </form>
       <ConfirmDialog
         open={deleting}
         onOpenChange={setDeleting}
-        title="删除渠道"
-        description={`确定删除 ${initial?.name}？它会从所有渠道组中移除，等待中的投递会失败。`}
-        confirmLabel="删除"
+        title={tr('删除渠道')}
+        description={tr('确定删除 {%value0%}？它会从所有渠道组中移除，等待中的投递会失败。', { value0: initial?.name })}
+        confirmLabel={tr('删除')}
         pending={remove.isPending}
         onConfirm={() => remove.mutate()}
       />
@@ -193,10 +195,11 @@ function FieldInput(props: {
   error?: string
   onChange: (v: ChannelConfigValue) => void
 }) {
+  useLocale()
   const { field: f, error } = props
-  const err = error ? { error } : {}
+  const err = error ? { error: issueMessage(error) } : {}
   const label = f.secret ? `🔒 ${f.label}` : f.label
-  const placeholder = f.secret && props.isSet ? '已设置，留空保持不变' : f.placeholder
+  const placeholder = f.secret && props.isSet ? tr('已设置，留空保持不变') : f.placeholder
   if (f.kind === 'boolean') {
     return <Switch label={f.label} checked={props.value === true} onCheckedChange={props.onChange} />
   }
@@ -228,7 +231,7 @@ function FieldInput(props: {
   }
   if (f.secret) {
     return (
-      <SensitiveInput
+      <SecretInput
         label={label}
         placeholder={placeholder}
         description={f.help}

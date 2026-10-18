@@ -1,20 +1,40 @@
 import type { BadgeVariant } from '@cloudflare/kumo'
 import { formatInZone } from '../../../src/lib/time'
 import type { DeliveryStatus, MessageLevel, MessageSource, MessageStatus } from '../../../src/shared/types'
+import { getLocale, tr } from '../i18n'
 
 export const viewerTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
-export const fmtTime = (ms: number | null | undefined, tz = viewerTimezone) => (ms ? formatInZone(ms, tz) : '—')
+const dates = new Map<string, Intl.DateTimeFormat>()
+const relative = {
+  en: new Intl.RelativeTimeFormat('en', { numeric: 'auto' }),
+  'zh-CN': new Intl.RelativeTimeFormat('zh-CN', { numeric: 'auto' }),
+}
+
+export function fmtTime(ms: number | null | undefined, tz = viewerTimezone): string {
+  if (ms == null) return '—'
+  const key = `${getLocale()}:${tz}`
+  let formatter = dates.get(key)
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(getLocale(), {
+      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    })
+    dates.set(key, formatter)
+  }
+  return formatter.format(ms)
+}
 
 export function fmtRelative(ms: number | null | undefined, now = Date.now()): string {
-  if (!ms) return '—'
+  if (ms == null) return '—'
   const diff = ms - now
   const abs = Math.abs(diff)
-  const suffix = diff > 0 ? '后' : '前'
-  if (abs < 5_000) return diff > 0 ? '即将' : '刚刚'
-  if (abs < 60_000) return `${Math.round(abs / 1000)} 秒${suffix}`
-  if (abs < 3_600_000) return `${Math.round(abs / 60_000)} 分钟${suffix}`
-  if (abs < 86_400_000) return `${Math.round(abs / 3_600_000)} 小时${suffix}`
+  const direction = diff > 0 ? 1 : -1
+  const formatter = relative[getLocale()]
+  if (abs < 5_000) return tr(diff > 0 ? '即将' : '刚刚')
+  if (abs < 60_000) return formatter.format(direction * Math.round(abs / 1000), 'second')
+  if (abs < 3_600_000) return formatter.format(direction * Math.round(abs / 60_000), 'minute')
+  if (abs < 86_400_000) return formatter.format(direction * Math.round(abs / 3_600_000), 'hour')
   return fmtTime(ms)
 }
 
@@ -31,7 +51,7 @@ export function fmtDuration(ms: number | null): string {
 export const fmtPercent = (rate: number | null) =>
   rate === null ? '—' : rate === 1 ? '100%' : `${(Math.floor(rate * 1000) / 10).toFixed(1)}%`
 
-export const fmtCount = (n: number) => n.toLocaleString('zh-CN')
+export const fmtCount = (n: number) => n.toLocaleString(getLocale())
 
 /** Stats bucket label: `MM-DD HH:00` for hourly buckets, `MM-DD` for daily ones. */
 export const fmtBucket = (ms: number, granularity: 'hour' | 'day') =>

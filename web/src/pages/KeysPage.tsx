@@ -1,3 +1,4 @@
+import { tr, useLocale } from '../i18n'
 import {
   Badge,
   Banner,
@@ -17,13 +18,14 @@ import { KeyIcon, PlusIcon, ProhibitIcon, TrashIcon, WarningIcon } from '@phosph
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import type { ApiKeyInfo } from '../../../src/shared/types'
-import { api, ApiError, errorMessage } from '../api'
+import { api, errorMessage } from '../api'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { PageHeader } from '../components/PageHeader'
 import { ErrorBanner, PageLoader } from '../components/States'
 import { fmtRelative, fmtTime } from '../lib/format'
 
 export function KeysPage() {
+  useLocale()
   const keys = useQuery({ queryKey: ['keys'], queryFn: api.keys })
   const [creating, setCreating] = useState(false)
   const [confirm, setConfirm] = useState<{ key: ApiKeyInfo; action: 'revoke' | 'delete' } | null>(null)
@@ -32,22 +34,20 @@ export function KeysPage() {
   const act = useMutation({
     mutationFn: (c: NonNullable<typeof confirm>) => (c.action === 'revoke' ? api.revokeKey(c.key.id) : api.deleteKey(c.key.id)),
     onSuccess: (_, c) => {
-      toasts.add({ title: c.action === 'revoke' ? 'Key 已吊销' : 'Key 已删除', variant: 'success' })
+      toasts.add({ title: c.action === 'revoke' ? tr('Key 已吊销') : tr('Key 已删除'), variant: 'success' })
       setConfirm(null)
       qc.invalidateQueries({ queryKey: ['keys'] })
     },
-    onError: (err) => toasts.add({ title: '操作失败', description: errorMessage(err), variant: 'error' }),
+    onError: (err) => toasts.add({ title: tr('操作失败'), description: errorMessage(err), variant: 'error' }),
   })
 
   const addButton = (
-    <Button variant="primary" icon={PlusIcon} onClick={() => setCreating(true)}>
-      创建 Key
-    </Button>
+    <Button variant="primary" icon={PlusIcon} onClick={() => setCreating(true)}>{tr('创建 Key')}</Button>
   )
 
   return (
     <>
-      <PageHeader title="API Key" description="调用 POST /api/send 用的 Bearer Token。可以限定只能发送到指定渠道组。" actions={addButton} />
+      <PageHeader title="API Key" description={tr('调用 POST /api/send 用的 Bearer Token。可以限定只能发送到指定渠道组。')} actions={addButton} />
       {keys.isPending ? (
         <PageLoader />
       ) : keys.isError ? (
@@ -56,8 +56,8 @@ export function KeysPage() {
         <LayerCard className="py-12">
           <Empty
             icon={<KeyIcon size={48} className="text-kumo-inactive" />}
-            title="还没有 API Key"
-            description="为每个调用方单独创建一个 Key，方便区分来源和单独吊销。"
+            title={tr('还没有 API Key')}
+            description={tr('为每个调用方单独创建一个 Key，方便区分来源和单独吊销。')}
             contents={addButton}
           />
         </LayerCard>
@@ -66,11 +66,11 @@ export function KeysPage() {
           <Table>
             <Table.Header>
               <Table.Row>
-                <Table.Head>名称</Table.Head>
+                <Table.Head>{tr('名称')}</Table.Head>
                 <Table.Head>Key</Table.Head>
-                <Table.Head>可用渠道组</Table.Head>
-                <Table.Head>最后使用</Table.Head>
-                <Table.Head>创建时间</Table.Head>
+                <Table.Head>{tr('可用渠道组')}</Table.Head>
+                <Table.Head>{tr('最后使用')}</Table.Head>
+                <Table.Head>{tr('创建时间')}</Table.Head>
                 <Table.Head className="w-24" />
               </Table.Row>
             </Table.Header>
@@ -80,7 +80,7 @@ export function KeysPage() {
                   <Table.Cell>
                     <div className="flex items-center gap-2">
                       <span className={k.revokedAt ? 'text-kumo-subtle line-through' : 'font-medium'}>{k.name}</span>
-                      {k.revokedAt && <Badge variant="neutral">已吊销</Badge>}
+                      {k.revokedAt && <Badge variant="neutral">{tr('已吊销')}</Badge>}
                     </div>
                   </Table.Cell>
                   <Table.Cell>
@@ -88,9 +88,7 @@ export function KeysPage() {
                   </Table.Cell>
                   <Table.Cell>
                     {k.channelGroups === null ? (
-                      <Text size="sm" variant="secondary">
-                        不限（含直接指定渠道）
-                      </Text>
+                      <Text size="sm" variant="secondary">{tr('不限（含直接指定渠道）')}</Text>
                     ) : (
                       <div className="flex flex-wrap gap-1">
                         {k.channelGroups.map((t) => (
@@ -102,15 +100,15 @@ export function KeysPage() {
                     )}
                   </Table.Cell>
                   <Table.Cell className="whitespace-nowrap" title={fmtTime(k.lastUsedAt)}>
-                    {k.lastUsedAt ? fmtRelative(k.lastUsedAt) : '从未'}
+                    {k.lastUsedAt ? fmtRelative(k.lastUsedAt) : tr('从未')}
                   </Table.Cell>
                   <Table.Cell className="whitespace-nowrap">{fmtTime(k.createdAt)}</Table.Cell>
                   <Table.Cell>
                     <div className="flex justify-end gap-1">
                       {!k.revokedAt && (
-                        <Button variant="ghost" size="sm" shape="square" icon={ProhibitIcon} aria-label={`吊销 ${k.name}`} title="吊销" onClick={() => setConfirm({ key: k, action: 'revoke' })} />
+                        <Button variant="ghost" size="sm" shape="square" icon={ProhibitIcon} aria-label={tr('吊销 {%value0%}', { value0: k.name })} title={tr('吊销')} onClick={() => setConfirm({ key: k, action: 'revoke' })} />
                       )}
-                      <Button variant="ghost" size="sm" shape="square" icon={TrashIcon} aria-label={`删除 ${k.name}`} title="删除" onClick={() => setConfirm({ key: k, action: 'delete' })} />
+                      <Button variant="ghost" size="sm" shape="square" icon={TrashIcon} aria-label={tr('删除 {%value0%}', { value0: k.name })} title={tr('删除')} onClick={() => setConfirm({ key: k, action: 'delete' })} />
                     </div>
                   </Table.Cell>
                 </Table.Row>
@@ -123,13 +121,13 @@ export function KeysPage() {
       <ConfirmDialog
         open={confirm !== null}
         onOpenChange={(open) => !open && setConfirm(null)}
-        title={confirm?.action === 'revoke' ? '吊销 Key' : '删除 Key'}
+        title={confirm?.action === 'revoke' ? tr('吊销 Key') : tr('删除 Key')}
         description={
           confirm?.action === 'revoke'
-            ? `吊销后 ${confirm.key.name} 立即失效，记录保留。`
-            : `删除 ${confirm?.key.name}？如果还在使用，调用会立即返回 401。`
+            ? tr('吊销后 {%value0%} 立即失效，记录保留。', { value0: confirm.key.name })
+            : tr('删除 {%value0%}？如果还在使用，调用会立即返回 401。', { value0: confirm?.key.name })
         }
-        confirmLabel={confirm?.action === 'revoke' ? '吊销' : '删除'}
+        confirmLabel={confirm?.action === 'revoke' ? tr('吊销') : tr('删除')}
         pending={act.isPending}
         onConfirm={() => confirm && act.mutate(confirm)}
       />
@@ -138,11 +136,12 @@ export function KeysPage() {
 }
 
 function CreateKeyDialog({ onClose }: { onClose: () => void }) {
+  useLocale()
   const channelGroups = useQuery({ queryKey: ['channelGroups'], queryFn: api.channelGroups })
   const [name, setName] = useState('')
   const [restricted, setRestricted] = useState(false)
   const [allowed, setAllowed] = useState<string[]>([])
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Error | string | null>(null)
   const [created, setCreated] = useState<string | null>(null)
   const qc = useQueryClient()
   const create = useMutation({
@@ -151,21 +150,19 @@ function CreateKeyDialog({ onClose }: { onClose: () => void }) {
       setCreated(r.key)
       qc.invalidateQueries({ queryKey: ['keys'] })
     },
-    onError: (err) => setError(err instanceof ApiError && err.issues.length ? err.issues.map((i) => i.message).join('；') : errorMessage(err)),
+    onError: (err) => setError(err),
   })
 
   return (
     <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
       <Dialog size="lg" className="p-6">
-        <Dialog.Title className="text-lg font-semibold">{created ? 'Key 已创建' : '创建 API Key'}</Dialog.Title>
+        <Dialog.Title className="text-lg font-semibold">{created ? tr('Key 已创建') : tr('创建 API Key')}</Dialog.Title>
         {created ? (
           <div className="mt-4 flex flex-col gap-4">
-            <Banner variant="alert" icon={<WarningIcon weight="fill" />} description="Key 只显示这一次，关闭后无法再查看。请现在复制保存。" />
-            <ClipboardText text={created} />
+            <Banner variant="alert" icon={<WarningIcon weight="fill" />} description={tr('Key 只显示这一次，关闭后无法再查看。请现在复制保存。')} />
+            <ClipboardText labels={{ copyAction: tr('复制到剪贴板') }} text={created} />
             <div className="flex justify-end">
-              <Button variant="primary" onClick={onClose}>
-                完成
-              </Button>
+              <Button variant="primary" onClick={onClose}>{tr('完成')}</Button>
             </div>
           </div>
         ) : (
@@ -178,24 +175,22 @@ function CreateKeyDialog({ onClose }: { onClose: () => void }) {
               create.mutate()
             }}
           >
-            <Input label="名称" placeholder="cf-task 告警" value={name} onChange={(e) => setName(e.target.value)} />
-            <Switch label="只允许发送到指定渠道组" checked={restricted} onCheckedChange={setRestricted} />
+            <Input label={tr('名称')} placeholder={tr('cf-task 告警')} value={name} onChange={(e) => setName(e.target.value)} />
+            <Switch label={tr('只允许发送到指定渠道组')} checked={restricted} onCheckedChange={setRestricted} />
             {restricted &&
               (channelGroups.data?.length ? (
-                <Checkbox.Group legend="可用渠道组" value={allowed} onValueChange={setAllowed}>
+                <Checkbox.Group legend={tr('可用渠道组')} value={allowed} onValueChange={setAllowed}>
                   {channelGroups.data.map((t) => (
                     <Checkbox.Item key={t.id} value={t.slug} label={`${t.name}（${t.slug}）`} />
                   ))}
                 </Checkbox.Group>
               ) : (
-                <Text variant="secondary">还没有渠道组。</Text>
+                <Text variant="secondary">{tr('还没有渠道组。')}</Text>
               ))}
-            {error && <Banner variant="error" size="sm" description={error} />}
+            {error && <Banner variant="error" size="sm" description={errorMessage(error)} />}
             <div className="flex justify-end gap-2">
-              <Dialog.Close render={(p) => <Button {...p}>取消</Button>} />
-              <Button type="submit" variant="primary" loading={create.isPending}>
-                创建
-              </Button>
+              <Dialog.Close render={(p) => <Button {...p}>{tr('取消')}</Button>} />
+              <Button type="submit" variant="primary" loading={create.isPending}>{tr('创建')}</Button>
             </div>
           </form>
         )}
