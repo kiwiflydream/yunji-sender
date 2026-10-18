@@ -57,7 +57,8 @@ async function assertChannelsExist(db: D1Database, ids: string[]) {
 function bindStatements(db: D1Database, channelGroupId: string, channelIds: string[]): D1PreparedStatement[] {
   return [
     db.prepare('DELETE FROM channel_group_channels WHERE channel_group_id = ?').bind(channelGroupId),
-    ...channelIds.map((cid) => db.prepare('INSERT INTO channel_group_channels (channel_group_id, channel_id) VALUES (?, ?)').bind(channelGroupId, cid)),
+    db.prepare('INSERT INTO channel_group_channels (channel_group_id, channel_id) SELECT ?, value FROM json_each(?)')
+      .bind(channelGroupId, JSON.stringify(channelIds)),
   ]
 }
 
@@ -85,12 +86,14 @@ export async function createChannelGroup(db: D1Database, raw: unknown, now = Dat
 export async function updateChannelGroup(db: D1Database, id: string, raw: unknown, now = Date.now()): Promise<ChannelGroup | null> {
   const input = parseOrThrow(channelGroupInputSchema, raw)
   const channelIds = [...new Set(input.channelIds)]
-  if (!(await getChannelGroup(db, id))) return null
+  const existing = await getChannelGroup(db, id)
+  if (!existing) return null
+  if (input.slug !== existing.slug) throw new ValidationError([{ path: 'slug', message: '渠道组标识创建后不能修改' }])
   await assertChannelsExist(db, channelIds)
   try {
     await db.batch([
-      db.prepare('UPDATE channel_groups SET slug = ?, name = ?, description = ?, updated_at = ? WHERE id = ?')
-        .bind(input.slug, input.name, input.description, now, id),
+      db.prepare('UPDATE channel_groups SET name = ?, description = ?, updated_at = ? WHERE id = ?')
+        .bind(input.name, input.description, now, id),
       ...bindStatements(db, id, channelIds),
     ])
   } catch (err) {

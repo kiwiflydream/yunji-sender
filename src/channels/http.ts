@@ -1,8 +1,8 @@
-import { readLimited, RESPONSE_BODY_LIMIT, truncateBytes } from '../lib/http-body'
+import { readLimited } from '../lib/http-body'
 import type { SendOutcome } from './types'
 
 export const SEND_TIMEOUT_MS = 10_000
-/** Enough for any provider's JSON reply; only RESPONSE_BODY_LIMIT is kept. */
+/** Bounded diagnostic text; the executor redacts it before truncating for persistence. */
 const READ_LIMIT = 64 * 1024
 
 /** A provider-level failure inside an HTTP response (e.g. `{"errcode": 45009}` with status 200). */
@@ -17,7 +17,12 @@ export interface AppError {
  * Called for every response; for non-2xx it only refines the error message
  * and may mark the failure retryable.
  */
-export type ResponseCheck = (json: any, status: number) => AppError | null
+export type ResponseCheck = (json: any, status: number, text: string) => AppError | null
+
+/** Missing acknowledgments on 2xx are retryable; non-2xx retain their HTTP classification. */
+export function invalidSuccessResponse(provider: string, status: number): AppError | null {
+  return status >= 200 && status < 300 ? { error: `${provider} 返回无效响应`, retryable: true } : null
+}
 
 /** Seconds or an HTTP date; null when absent or unparseable. */
 export function parseRetryAfter(value: string | null, now = Date.now()): number | null {
@@ -43,7 +48,8 @@ export async function deliverHttp(url: string, init: RequestInit, check?: Respon
   const started = Date.now()
   let res: Response
   try {
-    res = await fetch(url, { ...init, signal: AbortSignal.timeout(SEND_TIMEOUT_MS) })
+    // A configured target must not forward credentials or spend unbounded subrequests on redirects.
+    res = await fetch(url, { ...init, redirect: 'manual', signal: AbortSignal.timeout(SEND_TIMEOUT_MS) })
   } catch (err) {
     const timedOut = err instanceof DOMException && err.name === 'TimeoutError'
     return {
@@ -60,15 +66,15 @@ export async function deliverHttp(url: string, init: RequestInit, check?: Respon
   try {
     text = await readLimited(res, READ_LIMIT)
   } catch {
-    // The status is what matters; a broken body only loses the diagnostics.
+    // Protocol-aware providers will reject the missing acknowledgment below.
   }
   const durationMs = Date.now() - started
   let json: unknown = null
   try {
     json = text ? JSON.parse(text) : null
   } catch {}
-  const responseBody = text ? truncateBytes(text, RESPONSE_BODY_LIMIT) : null
-  const app = check?.(json, res.status) ?? null
+  const responseBody = text || null
+  const app = check?.(json, res.status, text) ?? null
 
   if (!res.ok) {
     const rateLimited = res.status === 429

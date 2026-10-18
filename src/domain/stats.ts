@@ -52,10 +52,18 @@ export interface StatsWindow {
   buckets: number[]
 }
 
-function localDate(epochMs: number, tz: string): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(
-    new Date(epochMs),
-  )
+/** Midnight may be skipped or repeated: use the first real instant of the local date. */
+function calendarStart(date: string, tz: string, dateAt: (t: number) => string): number {
+  const midnight = zonedTimeToEpoch(`${date}T00:00`, tz)!
+  if (dateAt(midnight) === date && dateAt(midnight - 1) < date) return midnight
+  let lo = midnight - 36 * HOUR_MS
+  let hi = midnight + 36 * HOUR_MS
+  while (hi - lo > 1) {
+    const mid = Math.floor((lo + hi) / 2)
+    if (dateAt(mid) < date) lo = mid
+    else hi = mid
+  }
+  return hi
 }
 
 /** 24h / 7d are hourly; 30d / 90d are local calendar days in `tz`, today included. */
@@ -67,10 +75,12 @@ export function statsWindow(range: StatsRange, now: number, tz: string): StatsWi
     return { range, granularity: 'hour', from: buckets[0], to: now, buckets }
   }
   const days = range === '30d' ? 30 : 90
-  const [y, m, d] = localDate(now, tz).split('-').map(Number)
+  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' })
+  const dateAt = (t: number) => formatter.format(t)
+  const [y, m, d] = dateAt(now).split('-').map(Number)
   const buckets = Array.from({ length: days }, (_, i) => {
     const date = new Date(Date.UTC(y, m - 1, d - (days - 1 - i))).toISOString().slice(0, 10)
-    return zonedTimeToEpoch(`${date}T00:00`, tz)!
+    return calendarStart(date, tz, dateAt)
   })
   return { range, granularity: 'day', from: buckets[0], to: now, buckets }
 }
@@ -88,7 +98,7 @@ function bucketOf(buckets: number[], t: number): number {
 }
 
 export interface StatsRow {
-  hour: number
+  bucket: number
   channel_id: string
   channel_group_slug: string
   sent: number
@@ -125,10 +135,10 @@ export function buildOverview(
   const byChannel = new Map<string, Agg>()
   const byChannelGroup = new Map<string, Agg>()
   for (const r of rows) {
-    if (r.hour < window.from || r.hour > window.to) continue
+    if (r.bucket < window.from || r.bucket > window.to) continue
     const agg = toAgg(r)
     addAgg(total, agg)
-    addAgg(buckets[bucketOf(window.buckets, r.hour)], agg)
+    addAgg(buckets[bucketOf(window.buckets, r.bucket)], agg)
     addAgg(byChannel.get(r.channel_id) ?? byChannel.set(r.channel_id, emptyAgg()).get(r.channel_id)!, agg)
     addAgg(byChannelGroup.get(r.channel_group_slug) ?? byChannelGroup.set(r.channel_group_slug, emptyAgg()).get(r.channel_group_slug)!, agg)
   }
@@ -150,8 +160,17 @@ export function buildOverview(
 export async function statsOverview(db: D1Database, window: StatsWindow): Promise<StatsOverview> {
   const [rows, channels] = await Promise.all([
     db
-      .prepare('SELECT * FROM delivery_stats_hourly WHERE hour >= ? AND hour <= ?')
-      .bind(window.from, window.to)
+      // Aggregate in D1 so minute storage does not multiply Worker response memory.
+      // JSON keeps even the 168 hourly boundaries below D1's bind-parameter limit.
+      .prepare(`WITH windows AS (
+          SELECT value AS start, LEAD(value, 1, ?2 + 1) OVER (ORDER BY value) AS end FROM json_each(?1)
+        )
+        SELECT w.start AS bucket, s.channel_id, s.channel_group_slug,
+          SUM(s.sent) AS sent, SUM(s.failed) AS failed, SUM(s.retries) AS retries,
+          SUM(s.latency_sum) AS latency_sum, MAX(s.latency_max) AS latency_max
+        FROM windows w JOIN delivery_stats s ON s.bucket >= w.start AND s.bucket < w.end
+        GROUP BY w.start, s.channel_id, s.channel_group_slug`)
+      .bind(JSON.stringify(window.buckets), window.to)
       .all<StatsRow>(),
     db.prepare('SELECT id, name, type FROM channels').all<{ id: string; name: string; type: ChannelType }>(),
   ])

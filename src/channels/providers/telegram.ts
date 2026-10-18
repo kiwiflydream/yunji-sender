@@ -1,6 +1,6 @@
 import { truncateChars } from '../../lib/http-body'
 import { escapeHtml, markdownToTelegramHtml } from '../../lib/markdown'
-import { postJson } from '../http'
+import { invalidSuccessResponse, postJson } from '../http'
 import { footerLines, headline, joinSections, plainText } from '../render'
 import { str, type ChannelProvider, type OutboundMessage } from '../types'
 
@@ -34,14 +34,15 @@ export const telegramProvider: ChannelProvider = {
           link_preview_options: { is_disabled: true },
           disable_notification: config.silent === true,
         }
-    return postJson(`${base}/bot${str(config, 'botToken')}/sendMessage`, payload, {}, (json) =>
-      json?.ok === true
+    return postJson(`${base}/bot${str(config, 'botToken')}/sendMessage`, payload, {}, (json, status) => {
+      if (typeof json?.ok !== 'boolean') return invalidSuccessResponse('Telegram', status)
+      return json.ok === true
         ? null
         : {
             error: String(json?.description ?? 'Telegram API returned ok=false'),
             retryable: json?.error_code === 429,
             retryAfterMs: typeof json?.parameters?.retry_after === 'number' ? json.parameters.retry_after * 1000 : null,
-          },
-    )
+          }
+    })
   },
 }

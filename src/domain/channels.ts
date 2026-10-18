@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { decryptString, encryptString } from '../lib/crypto'
+import { collectSecretValues } from '../lib/redact'
 import { CHANNEL_CATALOG, type ChannelField } from '../shared/catalog'
 import { CHANNEL_TYPES, type Channel, type ChannelConfigValue, type ChannelType, type Issue } from '../shared/types'
 import type { ChannelConfig } from '../channels/types'
@@ -161,7 +162,7 @@ export async function loadChannel(env: CloudflareBindings, id: string): Promise<
     type: r.type,
     enabled: r.enabled === 1,
     config: { ...JSON.parse(r.config), ...secrets },
-    secretValues: Object.values(secrets).filter((v) => v !== ''),
+    secretValues: collectSecretValues(secrets),
   }
 }
 

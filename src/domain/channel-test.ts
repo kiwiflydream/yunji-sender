@@ -1,5 +1,5 @@
 import { getProvider } from '../channels/registry'
-import { redact } from '../lib/redact'
+import { redact, redactResponse } from '../lib/redact'
 import type { ChannelTestResult } from '../shared/types'
 import { loadChannel } from './channels'
 
@@ -30,7 +30,7 @@ export async function testChannel(env: CloudflareBindings, id: string, now = Dat
     ok: outcome.ok,
     httpStatus: outcome.httpStatus,
     error: outcome.ok ? null : redact(outcome.error, channel.secretValues),
-    responseBody: outcome.responseBody === null ? null : redact(outcome.responseBody, channel.secretValues),
+    responseBody: redactResponse(outcome.responseBody, channel.secretValues),
     durationMs: outcome.durationMs,
   }
 }

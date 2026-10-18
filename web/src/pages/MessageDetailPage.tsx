@@ -167,7 +167,7 @@ export function MessageDetailPage({ id }: { id: string }) {
                 items={[
                   ['ID', <span className="font-mono text-xs">{m.id}</span>],
                   [tr('渠道组'), m.channelGroupSlug ?? '—'],
-                  [tr('来源'), SOURCE[m.source]],
+                  [tr('来源'), tr(SOURCE[m.source])],
                   [tr('格式'), m.content.format === 'markdown' ? 'Markdown' : tr('纯文本')],
                   [tr('发送时间'), fmtTime(m.sendAt)],
                   [tr('创建时间'), fmtTime(m.createdAt)],

@@ -149,6 +149,6 @@ pnpm run deploy                                # 完整检查、执行 D1 迁移
 
 **Queues 免费额度**：Workers Free 已支持 Queues，包含每天 10,000 次操作，消息保留 24 小时。一次正常投递通常涉及写入、读取、删除共 3 次操作，无重试时约可完成 3,333 次渠道投递；本项目按目标渠道分别入队，发往多个渠道和重试都会增加用量。详见 [Cloudflare Queues 官方计费说明](https://developers.cloudflare.com/queues/platform/pricing/)。
 
-**不用 Queues**：删掉 wrangler.jsonc 的 `queues` 段，运行 `pnpm cf-typegen`，在后台「设置」选择「直接发送」。到期的消息在请求的 `waitUntil` 里发送；定时消息和重试由每分钟的 Cron 处理，精度约 1 分钟。
+**不用 Queues**：删掉 wrangler.jsonc 的 `queues` 段，运行 `pnpm cf-typegen`，在后台「设置」选择「直接发送」。每次请求最多在 `waitUntil` 中投递 4 个目标，其余等待每分钟的 Cron；Cron 每轮最多处理 4 个到期投递（含定时、重试和积压），未轮到的任务不消耗尝试次数。精度约 1 分钟，积压会延迟；较多投递建议使用队列模式。
 
 **后台认证**：默认 basic（`ADMIN_USERNAME` + `ADMIN_PASSWORD`）。改用 Cloudflare Access：设置 `ADMIN_AUTH_MODE=access`、`ACCESS_TEAM_DOMAIN`、`ACCESS_AUD`，并在 Access 里保护 `/admin*`（不要保护 `/api/*`，它用 API Key 认证）。

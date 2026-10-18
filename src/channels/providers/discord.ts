@@ -1,5 +1,5 @@
 import { truncateChars } from '../../lib/http-body'
-import { postJson } from '../http'
+import { invalidSuccessResponse, postJson } from '../http'
 import { headline, joinSections, tagLine } from '../render'
 import { str, type ChannelConfig, type ChannelProvider, type OutboundMessage } from '../types'
 
@@ -29,6 +29,8 @@ export const discordProvider: ChannelProvider = {
     // wait=true makes Discord validate and return the message instead of a blind 204.
     const url = new URL(str(config, 'webhookUrl'))
     url.searchParams.set('wait', 'true')
-    return postJson(url.toString(), msg.raw ?? discordPayload(config, msg))
+    return postJson(url.toString(), msg.raw ?? discordPayload(config, msg), {}, (json, status) =>
+      typeof json?.id === 'string' && json.id ? null : invalidSuccessResponse('Discord', status),
+    )
   },
 }

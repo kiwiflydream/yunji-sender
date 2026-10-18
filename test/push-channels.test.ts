@@ -126,7 +126,7 @@ describe.each(channels)('$type integration', ({ type, config, secretField, succe
     expect(res.status).toBe(422)
     expect((await res.json() as any).issues[0].path).toBe(`config.${secretField}`)
     mockFetch(() => new Response('<html>proxy error</html>'))
-    expect(await getProvider(type).send(config, message())).toMatchObject({ ok: false, retryable: false })
+    expect(await getProvider(type).send(config, message())).toMatchObject({ ok: false, retryable: true })
   })
 
   it('uses the shared HTTP retry policy for throttling and transport failure', async () => {

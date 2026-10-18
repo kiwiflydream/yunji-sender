@@ -3,17 +3,17 @@ import { effectiveMode, QUEUE_MAX_DELAY_S } from '../delivery/mode'
 import { processDelivery, settleAttempt, type WaitUntil } from '../delivery/process'
 import { expiredLeases } from '../delivery/repo'
 import { getRuntimeSettings } from '../domain/settings'
+import { DIRECT_BATCH_LIMIT, EXPIRED_LEASE_LIMIT, MAINTENANCE_SCAN_LIMIT } from '../delivery/limits'
 
 /** Rows handled per cron run and step; a backlog drains over several minutes. */
-export const SCAN_LIMIT = 500
+export const SCAN_LIMIT = MAINTENANCE_SCAN_LIMIT
 /** A `queued` delivery this far past due was lost (queue send failed, message dead-lettered, waitUntil cut short). */
 export const STALE_QUEUED_MS = 15 * 60_000
-const DIRECT_CONCURRENCY = 6
 export const DAY_MS = 24 * 60 * 60_000
 const PURGE_INTERVAL_MS = 60 * 60_000
 const PURGE_KEY = 'maintenance:purge'
 const PURGE_BATCH = 500
-const MAX_PURGE_BATCHES = 20
+const MAX_PURGE_BATCHES = 5
 
 export interface MaintenanceReport {
   dispatched: number
@@ -45,7 +45,7 @@ export async function runMaintenance(
       `SELECT id, attempts, next_attempt_at FROM deliveries WHERE status = 'scheduled' AND next_attempt_at <= ?
        ORDER BY next_attempt_at LIMIT ?`,
     )
-    .bind(horizon, SCAN_LIMIT)
+    .bind(horizon, mode === 'direct' ? DIRECT_BATCH_LIMIT : SCAN_LIMIT)
     .all<{ id: string; attempts: number; next_attempt_at: number }>()
   let dispatched = 0
   if (mode === 'queue') {
@@ -63,15 +63,13 @@ export async function runMaintenance(
     dispatched = items.length
   } else {
     // processDelivery claims straight from `scheduled`; run inline so the cron's own lifetime covers it.
-    for (let i = 0; i < due.length; i += DIRECT_CONCURRENCY) {
-      await Promise.all(
-        due.slice(i, i + DIRECT_CONCURRENCY).map((d) =>
-          processDelivery(env, { deliveryId: d.id, attempt: d.attempts }).catch((err) =>
-            console.error('scheduled delivery failed', d.id, err),
-          ),
+    await Promise.all(
+      due.map((d) =>
+        processDelivery(env, { deliveryId: d.id, attempt: d.attempts }).catch((err) =>
+          console.error('scheduled delivery failed', d.id, err),
         ),
-      )
-    }
+      ),
+    )
     dispatched = due.length
   }
 
@@ -83,7 +81,7 @@ export async function runMaintenance(
     .bind(now, now - STALE_QUEUED_MS, SCAN_LIMIT)
     .run()
 
-  const leases = await expiredLeases(env.DB, now, SCAN_LIMIT)
+  const leases = await expiredLeases(env.DB, now, EXPIRED_LEASE_LIMIT)
   for (const d of leases) {
     await settleAttempt(
       env,
@@ -138,7 +136,7 @@ async function purge(db: D1Database, settings: { retentionDays: number; statsRet
     if (results.length < PURGE_BATCH) break
   }
   const stats = await db
-    .prepare('DELETE FROM delivery_stats_hourly WHERE hour < ?')
+    .prepare('DELETE FROM delivery_stats WHERE bucket < ?')
     .bind(now - settings.statsRetentionDays * DAY_MS)
     .run()
   return { purgedMessages, purgedStats: stats.meta.changes }

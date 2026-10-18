@@ -2,6 +2,7 @@ import type { ExecutionMode } from '../shared/types'
 import { deliveryQueue, QUEUE_MAX_DELAY_S } from './mode'
 import { processDelivery, type WaitUntil } from './process'
 import { markScheduled } from './repo'
+import { DIRECT_BATCH_LIMIT } from './limits'
 
 export interface Dispatchable {
   id: string
@@ -27,9 +28,11 @@ export async function dispatchQueued(
 ): Promise<void> {
   if (items.length === 0) return
   if (mode === 'direct') {
+    // Overflow has not been attempted: the next cron may claim it without spending a retry.
+    await markScheduled(env.DB, items.slice(DIRECT_BATCH_LIMIT).map((d) => d.id), now)
     waitUntil(
       Promise.all(
-        items.map((d) =>
+        items.slice(0, DIRECT_BATCH_LIMIT).map((d) =>
           processDelivery(env, { deliveryId: d.id, attempt: d.attempts }).catch((err) =>
             console.error('direct delivery failed', d.id, err),
           ),

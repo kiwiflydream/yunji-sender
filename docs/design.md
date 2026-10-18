@@ -3,7 +3,7 @@
 ## 模型
 
 - **渠道 channel**：一个投递目标（某个飞书群机器人、某个 Telegram 会话、某组邮箱）。字段由 `src/shared/catalog.ts` 描述，后台表单和服务端校验都从这里生成。标记为 `secret` 的字段整体 AES-GCM 加密存入 `secrets_encrypted`（AAD 绑定渠道 id），接口永不返回，编辑时留空表示保留原值。渠道类型创建后不能修改。
-- **渠道组 channelGroup**：渠道的命名分组。调用方只写 `channelGroup`，改接收人只改绑定。
+- **渠道组 channelGroup**：渠道的命名分组。调用方只写 `channelGroup`，改接收人只改绑定。标识创建后不可修改，名称和绑定可编辑，避免破坏模板及 API Key 的引用。
 - **API Key**：`cfs_` 前缀，只存 SHA-256；可限定只能发送到某些渠道组（此时不能直接指定渠道）。`last_used_at` 每分钟最多写一次。
 - **消息 message**：一次发送请求，存规范化内容和 `send_at`。
 - **投递 delivery**：消息 × 渠道，独立状态、重试和结果。渠道名和渠道组是快照，渠道删除后日志仍可读。
@@ -83,7 +83,11 @@ Cloudflare Queues 同时支持 Workers Free 和 Paid。Free 包含每天 10,000 
 | Server酱 | 原样 | SCT / sctp SendKey 自动选择端点；标题单行、最长 32 个 UTF-16 单元；接收人使用平台配置，raw 不能覆盖 channel / openid |
 | Email | 转 HTML | Resend，`Idempotency-Key` 用投递 id，重试不会重复发信 |
 
-`raw[渠道类型]` 替换生成的请求体，渠道仍补上路由字段（chat_id、device_key、飞书签名、邮件 from/to、PushPlus 凭据与接收目标）。Server酱从 SendKey 确定端点，并移除 raw 中的 channel / openid，保证接收目标由平台配置决定。
+`raw[渠道类型]` 替换生成的请求体，渠道仍固定路由字段（chat_id、device_key、飞书签名、邮件 from/to/cc/reply_to、PushPlus 凭据与接收目标）。Bark 移除 raw 的 device_key / device_keys，邮件移除 raw 的 from / to / cc / bcc / reply_to（均忽略大小写），再补上已保存的路由，避免受限调用方增加收件人。Server酱从 SendKey 确定端点，并移除 raw 中的 channel / openid，保证接收目标由平台配置决定。
+
+HTTP 请求不跟随重定向，避免凭据转发和额外子请求；应配置最终地址。协议渠道要求明确成功码或消息 ID，Slack 要求 `ok` 文本；2xx 缺少有效确认时按可重试失败处理。通用 Webhook 仍以 HTTP 状态判断成功。诊断内容先对单项请求头、URL 凭据及编码形式脱敏，再截取到 2 KB 保存。
+
+为 Workers Free 的执行预算预留余量：直接发送每次处理 4 个目标，其余转为 scheduled、尝试次数保持不变；Cron 直接模式每分钟处理 4 个到期目标，队列模式每轮派发 20 个，另最多恢复 2 个过期租约。每小时清理最多 5 批、每批 500 条过期消息。队列消费者每批最多 5 条。消息扇出和渠道组绑定用 JSON 批量写入，避免每个目标各占一条 SQL。
 
 ## 消息列表
 
@@ -93,4 +97,4 @@ Cloudflare Queues 同时支持 Workers Free 和 Paid。Free 包含每天 10,000 
 
 ## 统计
 
-`delivery_stats_hourly` 按（`send_at` 所在小时, 渠道, 渠道组）累加最终结果：送达、失败、重试次数、送达延迟（`send_at` → 送达）。24h/7d 按小时、30d/90d 按查看者时区的自然日聚合。
+`delivery_stats` 按（`send_at` 所在分钟, 渠道, 渠道组）累加最终结果：送达、失败、重试次数、送达延迟（`send_at` → 送达）。24h/7d 按小时、30d/90d 按查看者时区的自然日聚合；分钟粒度保留半小时、四分之一小时等时区的日界线，自然日使用当地日期的第一个真实时刻，处理午夜因夏令时跳过或重复的情况。查询先在 D1 聚合为展示桶，再返回 Worker，避免把每分钟的所有记录加载到内存。手动重试从同一个分钟桶撤回旧失败，日志清理不影响尚在统计保留期内的计数。

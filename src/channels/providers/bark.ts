@@ -1,4 +1,5 @@
-import { postJson } from '../http'
+import { invalidSuccessResponse, postJson } from '../http'
+import { withoutRoutingFields } from '../payload'
 import { joinSections, plainBody, tagLine } from '../render'
 import { str, type ChannelConfig, type ChannelProvider, type OutboundMessage } from '../types'
 
@@ -22,9 +23,11 @@ export const barkProvider: ChannelProvider = {
   send(config, msg) {
     const server = (str(config, 'serverUrl') || 'https://api.day.app').replace(/\/+$/, '')
     const routing = { device_key: str(config, 'deviceKey') }
-    const payload = { ...(msg.raw ?? barkPayload(config, msg)), ...routing }
-    return postJson(`${server}/push`, payload, {}, (json) =>
-      json?.code === 200 || json?.code === undefined ? null : { error: `Bark 返回 ${json.code}: ${json.message ?? ''}`.trim() },
-    )
+    const content = msg.raw ? withoutRoutingFields(msg.raw, ['device_key', 'device_keys']) : barkPayload(config, msg)
+    const payload = { ...content, ...routing }
+    return postJson(`${server}/push`, payload, {}, (json, status) => {
+      if (typeof json?.code !== 'number') return invalidSuccessResponse('Bark', status)
+      return json.code === 200 ? null : { error: `Bark 返回 ${json.code}: ${json.message ?? ''}`.trim() }
+    })
   },
 }

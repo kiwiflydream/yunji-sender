@@ -1,5 +1,6 @@
 import { escapeHtml, markdownToHtml } from '../../lib/markdown'
-import { postJson } from '../http'
+import { invalidSuccessResponse, postJson } from '../http'
+import { withoutRoutingFields } from '../payload'
 import { plainText, subject, tagLine } from '../render'
 import { str, type ChannelConfig, type ChannelProvider, type OutboundMessage } from '../types'
 
@@ -35,12 +36,21 @@ export function emailPayload(config: ChannelConfig, msg: OutboundMessage): Recor
 export const emailProvider: ChannelProvider = {
   type: 'email',
   send(config, msg) {
-    const routing = { from: str(config, 'from'), to: splitAddresses(str(config, 'to')) }
-    const payload = msg.raw ? { ...routing, ...msg.raw } : { ...routing, ...emailPayload(config, msg) }
+    const cc = splitAddresses(str(config, 'cc'))
+    const routing = {
+      from: str(config, 'from'),
+      to: splitAddresses(str(config, 'to')),
+      cc: cc.length ? cc : undefined,
+      reply_to: str(config, 'replyTo') || undefined,
+    }
+    const content = msg.raw
+      ? withoutRoutingFields(msg.raw, ['from', 'to', 'cc', 'bcc', 'reply_to'])
+      : emailPayload(config, msg)
+    const payload = { ...content, ...routing }
     return postJson(RESEND_API, payload, {
       authorization: `Bearer ${str(config, 'apiKey')}`,
       // Resend deduplicates for 24 h, so a retry after a lost response never sends twice.
       'idempotency-key': msg.deliveryId,
-    })
+    }, (json, status) => typeof json?.id === 'string' && json.id ? null : invalidSuccessResponse('Resend', status))
   },
 }

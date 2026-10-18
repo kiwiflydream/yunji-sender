@@ -1,4 +1,4 @@
-import { postJson } from '../http'
+import { invalidSuccessResponse, postJson } from '../http'
 import { footerLines, headline, joinSections } from '../render'
 import { str, type ChannelProvider } from '../types'
 
@@ -16,9 +16,9 @@ export const pushplusProvider: ChannelProvider = {
       option: str(config, 'option') || undefined,
       to: str(config, 'to') || undefined,
     }
-    return postJson('https://www.pushplus.plus/send', payload, {}, (json) => {
+    return postJson('https://www.pushplus.plus/send', payload, {}, (json, status) => {
       if (json?.code === 200) return null
-      if (typeof json?.code !== 'number') return { error: 'PushPlus 返回无效响应' }
+      if (typeof json?.code !== 'number') return invalidSuccessResponse('PushPlus', status)
       // 900 is an account restriction: the official API explicitly says to stop.
       return { error: `PushPlus 返回 ${json.code}: ${json.msg ?? ''}`.trim(), retryable: json.code === 500 }
     })

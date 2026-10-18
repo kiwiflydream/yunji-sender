@@ -2,7 +2,7 @@ import { loadChannel } from '../domain/channels'
 import { getRuntimeSettings } from '../domain/settings'
 import { getProvider } from '../channels/registry'
 import type { OutboundMessage, SendOutcome } from '../channels/types'
-import { redact } from '../lib/redact'
+import { redact, redactResponse } from '../lib/redact'
 import type { RuntimeSettings } from '../shared/types'
 import { deliveryQueue, effectiveMode, QUEUE_MAX_DELAY_S, type DeliveryMessage } from './mode'
 import { claimDelivery, deferDelivery, finishDelivery, markScheduled, type ClaimedDelivery } from './repo'
@@ -49,7 +49,7 @@ export async function attemptDelivery(env: CloudflareBindings, d: ClaimedDeliver
   }
   return {
     ...outcome,
-    responseBody: outcome.responseBody === null ? null : redact(outcome.responseBody, channel.secretValues),
+    responseBody: redactResponse(outcome.responseBody, channel.secretValues),
     ...(outcome.ok ? {} : { error: redact(outcome.error, channel.secretValues) }),
   }
 }

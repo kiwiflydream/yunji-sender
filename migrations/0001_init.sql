@@ -94,11 +94,12 @@ CREATE TABLE settings (
   updated_at INTEGER NOT NULL
 );
 
--- Hourly final outcomes per (channel, channelGroup). channel_group_slug is '' for messages
+-- Minute buckets preserve local-day boundaries even in fractional-hour timezones.
+-- Final outcomes per (channel, channelGroup). channel_group_slug is '' for messages
 -- sent straight to channels. latency is send_at -> sent (successful only);
 -- retries counts attempts beyond the first.
-CREATE TABLE delivery_stats_hourly (
-  hour INTEGER NOT NULL,
+CREATE TABLE delivery_stats (
+  bucket INTEGER NOT NULL,
   channel_id TEXT NOT NULL,
   channel_group_slug TEXT NOT NULL,
   sent INTEGER NOT NULL DEFAULT 0,
@@ -106,5 +107,5 @@ CREATE TABLE delivery_stats_hourly (
   retries INTEGER NOT NULL DEFAULT 0,
   latency_sum INTEGER NOT NULL DEFAULT 0,
   latency_max INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (hour, channel_id, channel_group_slug)
+  PRIMARY KEY (bucket, channel_id, channel_group_slug)
 ) WITHOUT ROWID;

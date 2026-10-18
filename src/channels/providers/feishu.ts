@@ -1,5 +1,5 @@
 import { hmacSha256, toBase64 } from '../../lib/hmac'
-import { postJson } from '../http'
+import { invalidSuccessResponse, postJson } from '../http'
 import { footerLines, headline, joinSections, plainText } from '../render'
 import { str, type ChannelProvider, type OutboundMessage } from '../types'
 
@@ -32,9 +32,10 @@ export const feishuProvider: ChannelProvider = {
     const secret = str(config, 'signSecret')
     const signing = secret ? await feishuSign(secret, Math.floor(Date.now() / 1000)) : {}
     const payload = { ...(msg.raw ?? feishuPayload(msg)), ...signing }
-    return postJson(str(config, 'webhookUrl'), payload, {}, (json) => {
+    return postJson(str(config, 'webhookUrl'), payload, {}, (json, status) => {
       const code = json?.code ?? json?.StatusCode
-      if (code === 0 || code === undefined) return null
+      if (typeof code !== 'number') return invalidSuccessResponse('飞书', status)
+      if (code === 0) return null
       return { error: `飞书返回 ${code}: ${json?.msg ?? json?.StatusMessage ?? ''}`.trim(), retryable: RATE_LIMIT_CODES.has(code) }
     })
   },

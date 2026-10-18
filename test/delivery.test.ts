@@ -19,7 +19,7 @@ async function delivery(id: string) {
 }
 
 async function stats() {
-  return env.DB.prepare('SELECT sent, failed, retries FROM delivery_stats_hourly').all<{ sent: number; failed: number; retries: number }>()
+  return env.DB.prepare('SELECT sent, failed, retries FROM delivery_stats').all<{ sent: number; failed: number; retries: number }>()
     .then((r) => r.results)
 }
 
@@ -213,7 +213,7 @@ describe('maintenance', () => {
     // Created long ago but scheduled for the future: kept.
     await env.DB.prepare(`INSERT INTO messages (id, source, payload, send_at, created_at) VALUES ('future', 'admin', '{}', ?, ?)`)
       .bind(Date.now() + 86_400_000, old).run()
-    await env.DB.prepare(`INSERT INTO delivery_stats_hourly (hour, channel_id, channel_group_slug, sent) VALUES (?, 'c', '', 1)`).bind(old).run()
+    await env.DB.prepare(`INSERT INTO delivery_stats (bucket, channel_id, channel_group_slug, sent) VALUES (?, 'c', '', 1)`).bind(old).run()
 
     const report = await runMaintenance(env, noWait)
     expect(report).toMatchObject({ purgedMessages: 1, purgedStats: 1 })

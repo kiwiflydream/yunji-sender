@@ -185,7 +185,8 @@ function ChannelGroupDialog({ initial, onClose }: { initial: ChannelGroup | null
             label={tr('标识')}
             className="font-mono"
             placeholder="ops-alert"
-            description={tr('调用 API 时用的 channelGroup，小写字母、数字、. _ -')}
+            description={initial ? tr('渠道组标识创建后不能修改') : tr('调用 API 时用的 channelGroup，小写字母、数字、. _ -')}
+            disabled={!!initial}
             value={form.slug}
             onChange={(e) => set('slug', e.target.value)}
             {...err('slug')}

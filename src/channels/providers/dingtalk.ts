@@ -1,5 +1,5 @@
 import { hmacSha256, toBase64 } from '../../lib/hmac'
-import { postJson } from '../http'
+import { invalidSuccessResponse, postJson } from '../http'
 import { footerLines, headline, joinSections, plainText, subject } from '../render'
 import { str, type ChannelProvider, type OutboundMessage } from '../types'
 
@@ -31,10 +31,9 @@ export const dingtalkProvider: ChannelProvider = {
   async send(config, msg) {
     const secret = str(config, 'signSecret')
     const url = secret ? await dingtalkSignedUrl(str(config, 'webhookUrl'), secret, Date.now()) : str(config, 'webhookUrl')
-    return postJson(url, msg.raw ?? dingtalkPayload(msg), {}, (json) =>
-      json?.errcode === 0 || json?.errcode === undefined
-        ? null
-        : { error: `钉钉返回 ${json.errcode}: ${json.errmsg ?? ''}`.trim(), retryable: json.errcode === RATE_LIMIT_CODE },
-    )
+    return postJson(url, msg.raw ?? dingtalkPayload(msg), {}, (json, status) => {
+      if (typeof json?.errcode !== 'number') return invalidSuccessResponse('钉钉', status)
+      return json.errcode === 0 ? null : { error: `钉钉返回 ${json.errcode}: ${json.errmsg ?? ''}`.trim(), retryable: json.errcode === RATE_LIMIT_CODE }
+    })
   },
 }

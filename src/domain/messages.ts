@@ -191,15 +191,12 @@ export async function sendMessage(env: CloudflareBindings, raw: unknown, opts: S
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(messageId, channelGroup, opts.source, opts.caller?.id ?? null, idem, JSON.stringify(content), sendAt, now),
-      ...deliveries.map((d) =>
-        env.DB
-          .prepare(
-            `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, channel_group_slug, status,
-               next_attempt_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          )
-          .bind(d.deliveryId, messageId, d.id, d.type, d.name, channelGroup, status, sendAt, now, now),
-      ),
+      env.DB.prepare(
+        `INSERT INTO deliveries (id, message_id, channel_id, channel_type, channel_name, channel_group_slug, status,
+           next_attempt_at, created_at, updated_at)
+         SELECT json_extract(value, '$.deliveryId'), ?1, json_extract(value, '$.id'), json_extract(value, '$.type'),
+           json_extract(value, '$.name'), ?2, ?3, ?4, ?5, ?5 FROM json_each(?6)`,
+      ).bind(messageId, channelGroup, status, sendAt, now, JSON.stringify(deliveries)),
     ])
   } catch (err) {
     // A concurrent request with the same key won the race.

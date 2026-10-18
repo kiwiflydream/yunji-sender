@@ -157,9 +157,9 @@ export function SendDialog({ onClose }: { onClose: () => void }) {
             </Checkbox.Group>
           )}
           </>}
-          {mode === 'template' && errors.channels && <Banner variant="error" description={errors.channels} />}
-          {mode === 'template' && errors.channelGroup && <Banner variant="error" description={errors.channelGroup} />}
-          {mode === 'template' && (errors.title || errors.body) && <Banner variant="error" description={errors.title || errors.body} />}
+          {mode === 'template' && errors.channels && <Banner variant="error" description={issueMessage(errors.channels)} />}
+          {mode === 'template' && errors.channelGroup && <Banner variant="error" description={issueMessage(errors.channelGroup)} />}
+          {mode === 'template' && (errors.title || errors.body) && <Banner variant="error" description={issueMessage(errors.title || errors.body)} />}
           {mode === 'custom' && <>
           <Input label={tr('标题')} value={title} onChange={(e) => setTitle(e.target.value)} {...err('title')} />
           <InputArea label={tr('正文')} rows={4} value={body} onChange={(e) => setBody(e.target.value)} {...err('body')} />

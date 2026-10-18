@@ -150,7 +150,7 @@ function RuntimeSettingsForm({ initial }: { initial: AdminMe }) {
               disabled={!initial.queueAvailable && mode !== 'queue'}
               description={initial.queueAvailable ? tr('秒级重试和 12 小时内的定时发送；免费套餐也可用') : tr('当前部署没有配置 Queue')}
             />
-            <Radio.Item label={tr('直接发送')} value="direct" description={tr('请求内用 waitUntil 发送；重试和定时由每分钟的 Cron 处理')} />
+            <Radio.Item label={tr('直接发送')} value="direct" description={tr('分批发送；积压、重试和定时任务由每分钟的 Cron 处理，可能延迟')} />
           </Radio.Group>
           <div className="grid gap-4 sm:grid-cols-3">
             {numberInput('maxAttempts', tr('最多尝试次数'), tr('含首次，1–10；只有可重试的错误会重试'))}

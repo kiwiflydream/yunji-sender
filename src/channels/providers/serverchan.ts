@@ -1,5 +1,5 @@
 import { truncateChars } from '../../lib/http-body'
-import { postJson } from '../http'
+import { invalidSuccessResponse, postJson } from '../http'
 import { footerLines, headline, joinSections, subject } from '../render'
 import { str, type ChannelProvider } from '../types'
 
@@ -22,9 +22,9 @@ export const serverchanProvider: ChannelProvider = {
       channel: undefined,
       openid: undefined,
     }
-    return postJson(endpoint, payload, {}, (json) => {
+    return postJson(endpoint, payload, {}, (json, status) => {
       if (json?.code === 0) return null
-      if (typeof json?.code !== 'number') return { error: 'Server酱返回无效响应' }
+      if (typeof json?.code !== 'number') return invalidSuccessResponse('Server酱', status)
       return { error: `Server酱返回 ${json.code}: ${json.message ?? json.info ?? ''}`.trim() }
     })
   },

@@ -1,6 +1,7 @@
 import type { ChannelType, Delivery, DeliveryStatus, MessageContent } from '../shared/types'
 
 export const HOUR_MS = 60 * 60_000
+export const STATS_BUCKET_MS = 60_000
 /** An attempt is considered lost when it holds the lease this long (send timeout is 10 s). */
 export const LEASE_MS = 60_000
 
@@ -119,20 +120,20 @@ export interface AttemptResult {
   error: string | null
 }
 
-const STATS_UPSERT = `ON CONFLICT (hour, channel_id, channel_group_slug) DO UPDATE SET
+const STATS_UPSERT = `ON CONFLICT (bucket, channel_id, channel_group_slug) DO UPDATE SET
   sent = sent + excluded.sent, failed = failed + excluded.failed, retries = retries + excluded.retries,
   latency_sum = latency_sum + excluded.latency_sum, latency_max = MAX(latency_max, excluded.latency_max)`
 
 /**
  * Count the final outcome of attempt `attempts` of a delivery still `sending`.
  * Batched right before the UPDATE that closes it, so it counts at most once.
- * Bucketed by the message's send_at hour; latency is send_at -> now.
+ * Bucketed by the message's send_at minute; latency is send_at -> now.
  */
 function finalStatsStatement(db: D1Database, id: string, attempts: number, sent: boolean, now: number) {
   return db
     .prepare(
-      `INSERT INTO delivery_stats_hourly (hour, channel_id, channel_group_slug, sent, failed, retries, latency_sum, latency_max)
-       SELECT m.send_at - m.send_at % ${HOUR_MS}, d.channel_id, COALESCE(d.channel_group_slug, ''), ?, ?, d.attempts - 1,
+      `INSERT INTO delivery_stats (bucket, channel_id, channel_group_slug, sent, failed, retries, latency_sum, latency_max)
+       SELECT m.send_at - m.send_at % ${STATS_BUCKET_MS}, d.channel_id, COALESCE(d.channel_group_slug, ''), ?, ?, d.attempts - 1,
          ? * MAX(0, ? - m.send_at), ? * MAX(0, ? - m.send_at)
        FROM deliveries d JOIN messages m ON m.id = d.message_id
        WHERE d.id = ? AND d.status = 'sending' AND d.attempts = ?
@@ -185,11 +186,12 @@ export async function deferDelivery(
 /** Fall back to the cron after a queue send failed. */
 export async function markScheduled(db: D1Database, ids: string[], now: number): Promise<void> {
   if (ids.length === 0) return
-  await db.batch(
-    ids.map((id) =>
-      db.prepare(`UPDATE deliveries SET status = 'scheduled', updated_at = ? WHERE id = ? AND status = 'queued'`).bind(now, id),
-    ),
-  )
+  // Reserve one of D1's 100 bind parameters for the timestamp.
+  for (let i = 0; i < ids.length; i += 99) {
+    const chunk = ids.slice(i, i + 99)
+    await db.prepare(`UPDATE deliveries SET status = 'scheduled', updated_at = ?
+      WHERE id IN (${chunk.map(() => '?').join(',')}) AND status = 'queued'`).bind(now, ...chunk).run()
+  }
 }
 
 export async function deliveriesOf(db: D1Database, messageId: string): Promise<Delivery[]> {
@@ -214,10 +216,10 @@ export async function reopenDelivery(
   const [, update] = await db.batch([
     db
       .prepare(
-        `UPDATE delivery_stats_hourly SET failed = failed - 1, retries = MAX(0, retries - (
+        `UPDATE delivery_stats SET failed = failed - 1, retries = MAX(0, retries - (
            SELECT attempts - 1 FROM deliveries WHERE id = ?1))
-         WHERE (hour, channel_id, channel_group_slug) = (
-           SELECT m.send_at - m.send_at % ${HOUR_MS}, d.channel_id, COALESCE(d.channel_group_slug, '')
+         WHERE (bucket, channel_id, channel_group_slug) = (
+           SELECT m.send_at - m.send_at % ${STATS_BUCKET_MS}, d.channel_id, COALESCE(d.channel_group_slug, '')
            FROM deliveries d JOIN messages m ON m.id = d.message_id WHERE d.id = ?1 AND d.status = 'failed')
          AND failed > 0`,
       )

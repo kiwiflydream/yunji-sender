@@ -1,5 +1,5 @@
 import { truncateBytes } from '../../lib/http-body'
-import { postJson } from '../http'
+import { invalidSuccessResponse, postJson } from '../http'
 import { footerLines, headline, joinSections, plainText } from '../render'
 import { str, type ChannelProvider, type OutboundMessage } from '../types'
 
@@ -19,10 +19,9 @@ export function wecomPayload(msg: OutboundMessage): Record<string, unknown> {
 export const wecomProvider: ChannelProvider = {
   type: 'wecom',
   async send(config, msg) {
-    return postJson(str(config, 'webhookUrl'), msg.raw ?? wecomPayload(msg), {}, (json) =>
-      json?.errcode === 0 || json?.errcode === undefined
-        ? null
-        : { error: `企业微信返回 ${json.errcode}: ${json.errmsg ?? ''}`.trim(), retryable: json.errcode === 45009 },
-    )
+    return postJson(str(config, 'webhookUrl'), msg.raw ?? wecomPayload(msg), {}, (json, status) => {
+      if (typeof json?.errcode !== 'number') return invalidSuccessResponse('企业微信', status)
+      return json.errcode === 0 ? null : { error: `企业微信返回 ${json.errcode}: ${json.errmsg ?? ''}`.trim(), retryable: json.errcode === 45009 }
+    })
   },
 }

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseRetryAfter } from '../src/channels/http'
 import { getProvider } from '../src/channels/registry'
 import { TELEGRAM_TEXT_LIMIT } from '../src/channels/providers/telegram'
-import type { OutboundMessage } from '../src/channels/types'
+import type { ChannelConfig, OutboundMessage } from '../src/channels/types'
+import type { ChannelType } from '../src/shared/types'
 import { hmacSha256, toBase64, toHex } from '../src/lib/hmac'
 import { mockFetch } from './helpers'
 
@@ -228,4 +229,51 @@ describe('transport errors', () => {
     expect(parseRetryAfter('soon')).toBeNull()
     expect(parseRetryAfter(null)).toBeNull()
   })
+})
+
+const acknowledgmentFixtures: [ChannelType, ChannelConfig, unknown][] = [
+  ['feishu', { webhookUrl: 'https://example.test/hook' }, { code: 0 }],
+  ['wecom', { webhookUrl: 'https://example.test/hook' }, { errcode: 0 }],
+  ['dingtalk', { webhookUrl: 'https://example.test/hook' }, { errcode: 0 }],
+  ['bark', { deviceKey: 'fixture' }, { code: 200 }],
+  ['telegram', { botToken: 'fixture', chatId: '1' }, { ok: true }],
+  ['pushplus', { token: 'fixture' }, { code: 200 }],
+  ['serverchan', { sendKey: 'fixture' }, { code: 0 }],
+  ['email', { apiKey: 'fixture', from: 'a@example.test', to: 'b@example.test' }, { id: 'accepted' }],
+  ['discord', { webhookUrl: 'https://example.test/hook' }, { id: 'accepted' }],
+  ['slack', { webhookUrl: 'https://example.test/hook' }, 'ok'],
+]
+
+describe.each(acknowledgmentFixtures)('%s acknowledgments', (type, config, success) => {
+  it.each(['', '<html>proxy error</html>', '{}', '{"code":"0","errcode":"0","ok":"true","id":1}'])(
+    'retries an invalid HTTP 200 response: %j', async (text) => {
+      mockFetch(() => new Response(text))
+      expect(await getProvider(type).send(config, msg())).toMatchObject({ ok: false, retryable: true, httpStatus: 200 })
+    },
+  )
+  it('accepts its explicit acknowledgment', async () => {
+    mockFetch(() => typeof success === 'string' ? new Response(success) : Response.json(success))
+    expect((await getProvider(type).send(config, msg())).ok).toBe(true)
+  })
+  it('keeps unauthorized HTTP errors permanent', async () => {
+    mockFetch(() => new Response('<html>unauthorized</html>', { status: 401 }))
+    expect(await getProvider(type).send(config, msg())).toMatchObject({ ok: false, retryable: false, httpStatus: 401 })
+  })
+})
+
+it('rejects a broken acknowledgment body but lets a generic webhook acknowledge by status', async () => {
+  mockFetch(() => new Response(new ReadableStream({ start(controller) { controller.error(new Error('body interrupted')) } })))
+  expect(await getProvider('feishu').send({ webhookUrl: 'https://example.test/hook' }, msg())).toMatchObject({ ok: false, retryable: true })
+  vi.restoreAllMocks()
+  mockFetch(() => new Response(null, { status: 204 }))
+  expect((await getProvider('webhook').send({ url: 'https://example.test/hook' }, msg())).ok).toBe(true)
+})
+
+it('does not follow redirects from a saved target', async () => {
+  const calls = mockFetch((request) => {
+    expect(request.redirect).toBe('manual')
+    return new Response(null, { status: 302, headers: { location: 'https://elsewhere.test/hook' } })
+  })
+  expect(await getProvider('webhook').send({ url: 'https://example.test/hook' }, msg())).toMatchObject({ ok: false, retryable: false, httpStatus: 302 })
+  expect(calls).toHaveLength(1)
 })

@@ -1,6 +1,6 @@
 import { truncateChars } from '../../lib/http-body'
 import { markdownToSlack } from '../../lib/markdown'
-import { postJson } from '../http'
+import { invalidSuccessResponse, postJson } from '../http'
 import { headline, plainText, tagLine } from '../render'
 import { str, type ChannelProvider, type OutboundMessage } from '../types'
 
@@ -20,5 +20,7 @@ export function slackPayload(msg: OutboundMessage): Record<string, unknown> {
 
 export const slackProvider: ChannelProvider = {
   type: 'slack',
-  send: (config, msg) => postJson(str(config, 'webhookUrl'), msg.raw ?? slackPayload(msg)),
+  send: (config, msg) => postJson(str(config, 'webhookUrl'), msg.raw ?? slackPayload(msg), {}, (_json, status, text) =>
+    text.trim() === 'ok' ? null : invalidSuccessResponse('Slack', status),
+  ),
 }

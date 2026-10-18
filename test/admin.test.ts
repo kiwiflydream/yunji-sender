@@ -1,7 +1,8 @@
 import { env } from 'cloudflare:workers'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { finishDelivery, claimDelivery } from '../src/delivery/repo'
-import { adminCall, ADMIN_AUTH, envWithoutQueue, mockFetch, request, webhookChannel } from './helpers'
+import { adminCall, ADMIN_AUTH, apiCall, apiKey, channelGroupWith, envWithQueue, envWithoutQueue, mockFetch, request, webhookChannel } from './helpers'
+import { saveTemplate } from '../src/domain/templates'
 
 afterEach(() => vi.restoreAllMocks())
 
@@ -104,6 +105,29 @@ describe('channels', () => {
 })
 
 describe('channelGroups', () => {
+  it('keeps the slug immutable while name and membership edits preserve template and key references', async () => {
+    const a = await webhookChannel('a')
+    const b = await webhookChannel('b')
+    const group = await channelGroupWith('orders', [a.id])
+    const key = await apiKey(['orders'])
+    await saveTemplate(env.DB, { id: 'group-test', name: 'test', body: '{{orderNo}}', channelGroup: 'orders' })
+    const renamed = await adminCall(`/channel-groups/${group.id}`, {
+      method: 'PUT', ...json({ ...group, slug: 'renamed', name: 'changed', channelIds: [b.id] }),
+    })
+    expect(renamed.status).toBe(422)
+    expect((await renamed.json() as any).issues).toContainEqual({ path: 'slug', message: '渠道组标识创建后不能修改' })
+    const q = envWithQueue()
+    const send = () => apiCall(key, '/send', { method: 'POST', ...json({ templateId: 'group-test', variables: { orderNo: '42' } }) }, q.env)
+    expect((await send()).status).toBe(202)
+    const edited = await adminCall(`/channel-groups/${group.id}`, {
+      method: 'PUT', ...json({ ...group, name: 'New name', channelIds: [b.id] }),
+    })
+    expect(edited.status).toBe(200)
+    expect((await send()).status).toBe(202)
+    const { results } = await env.DB.prepare('SELECT channel_id FROM deliveries').all()
+    expect(results).toHaveLength(2)
+    expect(results).toEqual(expect.arrayContaining([{ channel_id: a.id }, { channel_id: b.id }]))
+  })
   it('binds channels, enforces unique slugs, and drops bindings with the channel', async () => {
     const a = await webhookChannel('a')
     const b = await webhookChannel('b')
