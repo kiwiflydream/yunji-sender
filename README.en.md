@@ -38,6 +38,8 @@ Messages support text and Markdown, converted or downgraded for each provider. S
 
 You need a Cloudflare account, Node.js 22.12 or newer and pnpm 10.34.4. Run the following from the project directory. The pnpm version is pinned in `package.json`.
 
+Builds use `pnpm@10.34.4`, declared in `package.json`. If Cloudflare still selects pnpm 9, set `PNPM_VERSION=10.34.4` in the Worker’s **Builds environment variables** and retry. This configures the build tool, not the Worker runtime.
+
 ### 1. Install dependencies and sign in
 
 ```sh
