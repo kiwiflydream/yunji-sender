@@ -8,9 +8,34 @@ A multi-channel notification gateway deployed on Cloudflare.
 
 Send order updates, deployment results and service alerts through one API. Manage recipients, templates and retries in the admin UI without integrating every notification provider into each application or running a dedicated server.
 
-[Quick deployment](#quick-deployment) · [Configuration reference](#configuration-reference) · [Send your first message](#send-your-first-message) · [Integration guide](docs/usage.en.md) · [Local development](docs/development.en.md)
+[Screenshots](#screenshots) · [Quick deployment](#quick-deployment) · [Configuration reference](#configuration-reference) · [Send your first message](#send-your-first-message) · [Integration guide](docs/usage.en.md) · [Local development](docs/development.en.md)
 
 > **Basic authentication is the default for quick deployment.** Set an admin password to get started; Cloudflare Access can be configured later.
+
+## Screenshots
+
+Captured from the app running locally. All channels, messages and statistics are fictional demo data, not production performance results.
+
+**Messages**: review delivery outcomes, channel groups and request sources in one place.
+
+![Yunji Sender message history with delivered, partially failed and failed demo notifications](docs/images/messages-en.png)
+
+<details>
+<summary>View channels, templates and delivery statistics</summary>
+
+**Channels**: manage notification providers and their channel groups.
+
+![Yunji Sender channels with Telegram, Feishu, WeCom, Bark, email and Webhook demo targets](docs/images/channels-en.png)
+
+**Templates**: reuse notification content with variables and default delivery targets.
+
+![Yunji Sender message templates with variables and default channel groups](docs/images/templates-en.png)
+
+**Statistics**: inspect delivery outcomes, success rates, latency and retries by channel or group.
+
+![Yunji Sender delivery statistics with hourly results and channel breakdowns](docs/images/statistics-en.png)
+
+</details>
 
 ## Features
 
