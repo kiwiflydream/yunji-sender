@@ -8,9 +8,9 @@
 
 业务系统只需调用一个 API，即可把订单通知、部署结果或服务告警发送到多个渠道。接收人、消息模板和失败重试在后台统一管理，无需在每个项目中分别接入通知服务，也无需维护常驻服务器。
 
-[快速部署](#快速部署) · [发送第一条消息](#发送第一条消息) · [接入指南](docs/usage.md) · [本地开发](docs/development.md)
+[快速部署](#快速部署) · [配置总览](#配置总览) · [发送第一条消息](#发送第一条消息) · [接入指南](docs/usage.md) · [本地开发](docs/development.md)
 
-> **正式部署推荐使用 Cloudflare Access 管理后台登录与访问授权。** 通过 Access 策略限定可访问的身份，并将 `ADMIN_AUTH_MODE` 设置为 `access`。默认 Basic 认证仅作为本地开发或快速试用的简便方式；配置方法见下方部署步骤。Access 保护后台，业务 API 仍使用独立 API Key。
+> **默认使用 Basic 认证，方便快速部署体验。** 设置后台密码即可登录，后续可按需切换 Cloudflare Access。
 
 ## 功能
 
@@ -66,9 +66,21 @@ pnpm exec wrangler queues create yunji-sender-deliveries-dlq
 
 ### 4. 配置后台认证与加密密钥
 
-**推荐使用 Cloudflare Access，集中管理后台登录与访问策略。** 在 Cloudflare Zero Trust 中创建 Self-hosted 应用，覆盖实际访问域名的 `/admin` 和 `/admin/*`，并配置仅允许指定邮箱、用户组或身份提供商身份的策略。确认应用覆盖后台根路径和所有子路径，包括 `/admin/api/*`。
+默认使用 Basic 认证。保留 `ADMIN_AUTH_MODE=basic` 和 `ADMIN_USERNAME=admin`，部署向导只需填写两个值：独立强密码和用 `openssl rand -base64 32` 生成的加密密钥。
 
-在 `wrangler.jsonc` 的 `vars` 中设置：
+```sh
+pnpm exec wrangler secret put ADMIN_PASSWORD
+pnpm exec wrangler secret put ENCRYPTION_KEY
+```
+
+妥善备份加密密钥，丢失或更换后原有渠道凭据将无法解密。发送消息用的 API Key 在部署后的后台创建，无需作为部署密钥填写。
+
+<details>
+<summary>可选：切换为 Cloudflare Access</summary>
+
+**可选：使用 Cloudflare Access 管理后台登录与访问策略。** 在 Cloudflare Zero Trust 中创建 Self-hosted 应用，覆盖实际访问域名的 `/admin` 和 `/admin/*`，并配置仅允许指定邮箱、用户组或身份提供商身份的策略。确认应用覆盖后台根路径和所有子路径，包括 `/admin/api/*`。
+
+在 `wrangler.jsonc` 的 `vars` 中添加或修改：
 
 ```json
 {
@@ -82,21 +94,9 @@ pnpm exec wrangler queues create yunji-sender-deliveries-dlq
 
 不要把业务 `/api/*` 纳入要求交互登录的后台 Access 应用；这些请求继续使用 Sender API Key。若同时开放自定义域名、`workers.dev` 或预览地址，需逐一核对后台访问入口的保护范围。详细步骤见 [Access 官方配置指南](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/self-hosted-public-app/)。
 
-所有认证模式都需要设置渠道凭据加密密钥：
+Access 模式不使用 `ADMIN_PASSWORD`。
 
-```sh
-pnpm exec wrangler secret put ENCRYPTION_KEY
-```
-
-按提示输入用 `openssl rand -base64 32` 生成的密钥并妥善备份。密钥丢失或更换后，原有渠道凭据将无法解密。首次设置时，如果提示创建同名 Worker，确认创建后继续即可。
-
-本地开发或快速试用可保留默认 `ADMIN_AUTH_MODE: "basic"`，再执行以下命令设置独立强密码，用户名默认 `admin`：
-
-```sh
-pnpm exec wrangler secret put ADMIN_PASSWORD
-```
-
-Access 模式无需 `ADMIN_PASSWORD`。发送消息用的 API Key 在后台创建，无需作为部署密钥填写。
+</details>
 
 ### 5. 部署并打开后台
 
@@ -104,7 +104,7 @@ Access 模式无需 `ADMIN_PASSWORD`。发送消息用的 API Key 在后台创�
 pnpm run deploy
 ```
 
-此命令会依次运行类型检查、单元测试和构建，初始化 D1 表结构，再发布 Worker。部署完成后，打开输出地址的 `/admin`，按 Access 策略完成身份验证；选择 Basic 模式时，使用 `admin` 和刚设置的 `ADMIN_PASSWORD` 登录。
+此命令会依次运行类型检查、单元测试和构建，初始化 D1 表结构，再发布 Worker。部署完成后，打开输出地址的 `/admin`，使用 `admin` 和刚设置的 `ADMIN_PASSWORD` 登录；切换为 Access 后则按 Access 页面提示登录。
 
 发布前的完整验证命令为 `pnpm check:release`，浏览器安装和验证范围见[本地开发](docs/development.md)。
 
@@ -132,6 +132,73 @@ curl "$SENDER_BASE_URL/api/send" \
 ```
 
 首次提交返回 `202` 和 `messageId`，表示消息已受理。使用同一 API Key 和幂等键重试会返回原消息；发送新事件时应换一个键。投递结果可在后台查看，也可通过 `GET /api/messages/:id` 查询。
+
+## 配置总览
+
+首次部署只需填写 `ADMIN_PASSWORD` 和 `ENCRYPTION_KEY`，登录模式和用户名保留默认。可选集成在部署后按需配置。
+
+### 环境变量与密钥
+
+普通变量在 `wrangler.jsonc` 的 `vars` 中配置，修改后重新部署；密钥用 `pnpm exec wrangler secret put 名称` 设置。也可在 Cloudflare Worker 的变量与密钥页面配置，但应同步普通变量到仓库，避免下次部署覆盖。本地开发写入 `.dev.vars`，不要提交密钥。
+
+| 配置 | 类型 | 默认值 / 填写条件 | 对应功能与用法 |
+| --- | --- | --- | --- |
+| `ADMIN_AUTH_MODE` | 普通变量 | `basic`；选填 | 后台登录方式，可选 `basic`、`access` |
+| `ADMIN_USERNAME` | 普通变量 | `admin`；选填 | Basic 登录用户名，Access 模式不使用 |
+| `ADMIN_PASSWORD` | 密钥 | 无默认；Basic 模式必填 | 后台登录密码；Access 模式不使用 |
+| `ENCRYPTION_KEY` | 密钥 | 无默认；部署时填写 | 加密渠道凭据；用 `openssl rand -base64 32` 生成，丢失或更换后旧凭据无法解密 |
+| `ACCESS_TEAM_DOMAIN` | 普通变量 | 未配置；Access 模式必填 | 团队域名，如 `myteam.cloudflareaccess.com`，不含协议或路径 |
+| `ACCESS_AUD` | 普通变量 | 未配置；Access 模式必填 | 保护后台的 Access 应用 AUD；还需在 Zero Trust 创建应用及访问策略 |
+
+Sender 没有 `API_TOKEN` 环境变量。发送消息的 API Key 在后台创建；各渠道的 Token、Webhook 地址、接收人等也在「渠道」页管理，见[渠道配置](docs/usage.md#渠道配置)。
+
+### 后台运行设置
+
+在「设置」页保存到数据库，保存后生效，无需重新部署。这些字段不是环境变量，不要放入 `vars`。
+
+| 配置字段 | 默认值 | 对应功能 / 可选范围 |
+| --- | --- | --- |
+| `executionMode` | `queue` | `queue` 或 `direct`；未绑定队列时实际使用直接发送 |
+| `maxAttempts` | `5` | 最多尝试次数（含首次），1–10 |
+| `retentionDays` | `30` | 消息与投递记录保留天数，1–3650 |
+| `statsRetentionDays` | `90` | 汇总统计保留天数，1–3650 |
+| `sendingPaused` | `false` | 暂停接收新消息、派发与渠道测试；已发出的请求无法撤回 |
+| `dailyDeliveryLimit` | `1000` | 每日接收投递上限，1–1000000，按目标渠道计数 |
+| `perKeyDailyDeliveryLimit` | `500` | 每个调用方每日投递上限，1–1000000 |
+| `perKeyMinuteLimit` | `100` | 每个调用方每分钟投递上限，1–100000 |
+| `maxPendingDeliveries` | `1000` | 定时、排队及发送中的投递总上限，1–100000 |
+| `dailyWorkLimit` | `3000` | 每日执行预算，1–3000000；每次入队或实际发送消耗一次，含重试及渠道测试 |
+
+日额度在 UTC 00:00 重置，分钟额度按 UTC 自然分钟计数。每个 API Key 独立计数，后台和 RPC 分别共享调用方额度。详细行为见[执行与费用说明](docs/execution.md)。
+
+### Cloudflare 资源与部署设置
+
+这些配置位于 `wrangler.jsonc`。绑定名称由代码使用，通常保留模板默认值；改动资源绑定后执行 `pnpm cf-typegen` 并重新部署。
+
+| 配置 / 绑定 | 用途及默认行为 |
+| --- | --- |
+| `name` | Worker 名称，默认 `yunji-sender` |
+| `DB` / `d1_databases` | 必需的 D1 数据库，存放渠道、消息、API Key、模板与额度；命令行部署填写真实 `database_id`，一键部署由向导创建并回填 |
+| `DELIVERY_QUEUE` / `queues` | 可选投递队列，模板已配置；批量 5 条、等待 1 秒、最多重试 3 次、并发 2，并配有死信队列；不使用时删除整个 `queues` 段，改用直接发送 |
+| `INBOUND_RATE_LIMIT` | 必需的入口限流绑定，默认每 IP、每类入口 300 次/60 秒 |
+| `INBOUND_TOTAL_LIMIT` | 必需的入口共享限流绑定，默认每类入口合计 1000 次/60 秒 |
+| `STATS_RATE_LIMIT` | 必需的统计读取限流绑定，默认共享 30 次/60 秒 |
+| `ratelimits[].namespace_id` | 原生限流命名空间；同一账户部署多个独立实例时分配不同 ID，避免共用额度 |
+| `limits.cpu_ms` | 单次调用 CPU 时间上限，默认 1000 毫秒，不是请求总等待时长 |
+| `ASSETS` / `assets` | 后台静态资源及路由；保留 `/admin` 和 `/admin/*` 优先经过 Worker 的鉴权规则 |
+| `triggers.crons` | 默认 `* * * * *`，每分钟处理到期投递、重试、恢复和清理 |
+| `observability.enabled` | 默认 `true`，启用 Worker 可观测性日志 |
+| `main`、`compatibility_date` | 运行入口与兼容日期，通常无需修改 |
+
+原生限流不是全球精确的账单上限；缺少限流绑定会拒绝对应请求。业务日预算由 D1 管理，详见[入口保护](docs/execution.md#入口与统计读取保护)。其他 Worker 调用 Sender RPC 时，在**调用方项目**配置指向本项目的 `services` 绑定，入口为 `SenderRpc`，见[接入示例](docs/usage.md#worker-service-binding)。
+
+### 业务配置与浏览器偏好
+
+- **渠道**：选择服务商、填写凭据和接收人、设置启用状态及超时；服务商字段见[渠道配置](docs/usage.md#渠道配置)。
+- **渠道组**：将多个渠道组合成发送目标，调用时传 `channelGroup`。
+- **API Key**：在后台创建调用凭据、设置权限与可访问渠道组，可撤销；不是部署密钥。
+- **消息模板**：保存标题、正文、格式及变量定义，发送时传模板与变量；定时、幂等及取消参数见[接入指南](docs/usage.md)。
+- **语言 / 外观**：在「设置」页选择中英文及跟随系统、浅色、深色，只保存在当前浏览器。
 
 ## 文档
 
