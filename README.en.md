@@ -153,3 +153,7 @@ These controls are not a monetary hard cap. Native rate limits are per Cloudflar
 A successful delivery means the provider accepted the request; final receipt depends on the provider. Scheduled times are not exact arrival guarantees: queues, platform scheduling and retries may delay delivery.
 
 History is removed according to retention settings. Its idempotency keys cease to prevent new messages after removal. Webhook receivers should also deduplicate using the delivery identifier.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
