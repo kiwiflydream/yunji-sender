@@ -22,9 +22,8 @@ import type { ApiCaller } from './api-keys'
 import { ForbiddenError, parseOrThrow, ValidationError } from './errors'
 import { getRuntimeSettings } from './settings'
 import { expandTemplateRequest } from './templates'
+import { BODY_LIMIT, RAW_LIMIT, utf8ByteLength } from '../shared/limits'
 
-export const BODY_LIMIT = 16 * 1024
-const RAW_LIMIT = 32 * 1024
 export const MAX_SEND_AHEAD_MS = 365 * 24 * 60 * 60_000
 
 const isHttpUrl = (v: string) => {
@@ -40,7 +39,7 @@ export const sendInputSchema = z
     channelGroup: z.string().trim().min(1).max(64).optional(),
     channels: z.array(z.string().trim().min(1)).max(50).optional(),
     title: z.string().trim().max(256).default(''),
-    body: z.string().max(BODY_LIMIT).default(''),
+    body: z.string().max(BODY_LIMIT).refine((v) => utf8ByteLength(v) <= BODY_LIMIT, '正文不能超过 16 KB').default(''),
     format: z.enum(MESSAGE_FORMATS).default('text'),
     level: z.enum(MESSAGE_LEVELS).default('info'),
     url: z.preprocess(
@@ -54,7 +53,7 @@ export const sendInputSchema = z
   }).strict()
   .refine((v) => v.title !== '' || v.body.trim() !== '', { path: ['body'], message: 'title 和 body 至少填一个' })
   .refine((v) => !!v.channelGroup || (v.channels?.length ?? 0) > 0, { path: ['channelGroup'], message: '需要 channelGroup 或 channels' })
-  .refine((v) => JSON.stringify(v.raw).length <= RAW_LIMIT, { path: ['raw'], message: 'raw 不能超过 32 KB' })
+  .refine((v) => utf8ByteLength(JSON.stringify(v.raw)) <= RAW_LIMIT, { path: ['raw'], message: 'raw 不能超过 32 KB' })
 
 
 export interface SendOptions {

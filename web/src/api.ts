@@ -123,6 +123,7 @@ export function errorMessage(err: unknown): string {
   const known: Record<string, string> = {
     unauthorized: '认证失败，请检查登录状态', forbidden: '没有操作权限', not_found: '资源不存在',
     validation_failed: '请检查输入内容', internal_error: '服务器错误，请稍后重试',
+    payload_too_large: '请求体不能超过 256 KB',
     'Failed to fetch': '网络请求失败，请稍后重试', 'Load failed': '网络请求失败，请稍后重试',
     'Invalid input': '输入不符合要求',
   }

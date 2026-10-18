@@ -1,7 +1,5 @@
 # 云吉 Sender · Yunji Sender
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/YOUR_USERNAME/yunji-sender)
-
 运行在 Cloudflare 上的多渠道通知网关：一个 API 发消息，按渠道组扇出到 Webhook、Telegram、飞书、企业微信、钉钉、Slack、Discord、Bark、PushPlus、Server酱、Email（Resend）。失败自动退避重试，支持变量消息模板、定时发送、幂等键、投递记录与统计图表，[Kumo](https://github.com/cloudflare/kumo) 管理后台。设计见 [docs/design.md](docs/design.md)。
 
 技术栈：Hono · Workers · Queues（投递与重试，可关闭）· D1（配置、日志、统计）· Cron（定时消息、补偿、清理）；后台是 React + Kumo 单页应用，由 Vite + `@cloudflare/vite-plugin` 构建为 Workers 静态资源。
@@ -38,12 +36,14 @@ curl -X POST https://<worker>/api/send \
 | --- | --- |
 | `channelGroup` | 渠道组标识，消息发到它绑定的所有已启用渠道 |
 | `channels` | 渠道 id 数组，可与 `channelGroup` 同时使用（去重） |
-| `title` / `body` | 至少一个；`body` 最长 16 KB |
+| `title` / `body` | 至少一个；`body` 按 UTF-8 编码最多 16 KB（16,384 字节） |
 | `format` | `text`（默认）或 `markdown`，各渠道自动转换或降级 |
 | `level` | `info`（默认）/ `warn` / `error`，影响标题前缀、卡片颜色、邮件主题等 |
 | `url` / `tags` | 可选的链接和标签（最多 10 个） |
 | `sendAt` | 毫秒时间戳或 ISO 8601，最多提前 365 天；省略或已过去则立即发送 |
 | `raw` | 按渠道类型覆盖请求体，如 `{"feishu": {"msg_type": "post", ...}}`；路由字段（chat_id、device_key、签名、收件人）仍由渠道补上 |
+
+正文、raw 和模板变量按 UTF-8 字节计量，1 KB = 1,024 字节。`raw` 序列化后最多 32 KB；Bark 和 Email 会过滤 raw 中非 ASCII 的顶层字段名，字段值仍支持中文和表情。模板的单个字符串变量最多 16 KB、整个变量对象序列化后最多 32 KB，展开后的正文最多 16 KB。HTTP JSON 请求体整体最多 256 KB（包含 JSON 转义），超出返回 `413 { error: "payload_too_large", maxBytes: 262144 }`，字段内容超限返回 `422`。
 
 返回 `202 { messageId, deliveries: [...] }`；相同 API Key + `Idempotency-Key` 的重复请求返回 `200` 和原消息（`duplicate: true`）。`GET /api/messages/:id` 查询投递状态，`POST /api/messages/:id/cancel` 取消尚未开始的投递。
 
@@ -99,11 +99,16 @@ pnpm dev                          # http://localhost:5173/admin（admin / .dev.v
 
 ```sh
 pnpm test        # vitest，在 workerd 中运行
-pnpm typecheck   # Worker、前端、测试三套 tsconfig
+pnpm typecheck   # Worker、前端、单元测试、浏览器测试四套 tsconfig
 pnpm build
-pnpm check       # 依次执行 typecheck、test、build；CI 和 deploy 共用此检查
+pnpm check       # 依次执行 typecheck、test、build
+pnpm exec playwright install chromium  # 首次安装浏览器；Linux CI 加 --with-deps
+pnpm test:e2e    # 独立临时目录构建、空 D1、随机测试密钥和本地模拟渠道
+pnpm check:release # 完整发布前检查：check + test:e2e；CI 使用此命令
 pnpm cf-typegen  # 修改 wrangler.jsonc 后重新生成 worker-configuration.d.ts
 ```
+
+浏览器测试覆盖中英文桌面和手机页面、模板字节预览、网站图标、侧栏开合，以及队列消费、直发、定时取消、失败重试、Cron 补偿、API Key 权限和幂等。测试不会读取开发库或真实渠道凭证，结束后清理临时环境；失败时截图和 trace 保存到已忽略的 `test-results/`，CI 保留 7 天。
 
 本地手动触发 Cron：`curl "http://localhost:5173/cdn-cgi/handler/scheduled?cron=*+*+*+*+*"`。
 
@@ -111,9 +116,7 @@ pnpm cf-typegen  # 修改 wrangler.jsonc 后重新生成 worker-configuration.d.
 
 ### 一键部署
 
-项目尚未发布到 GitHub，顶部按钮中的 `https://github.com/YOUR_USERNAME/yunji-sender` 是占位地址。发布为公开仓库后，将它替换为实际仓库地址，按钮即可直接导入本项目。
-
-点击顶部按钮，按以下步骤部署。流程见 [Cloudflare 官方文档](https://developers.cloudflare.com/workers/platform/deploy-buttons/)。
+发布到 GitHub 或 GitLab 后，使用实际仓库 URL 生成部署链接：`https://deploy.workers.cloudflare.com/?url=<URL 编码后的仓库地址>`。按 [Cloudflare 官方文档](https://developers.cloudflare.com/workers/platform/deploy-buttons/) 打开生成的链接并部署：
 
 1. 登录 Cloudflare，授权 GitHub 或 GitLab，将项目复制到自己的仓库。
 2. 确认 Worker、D1 和 Queue 的名称，Cloudflare 会根据 `wrangler.jsonc` 创建并绑定资源。
@@ -128,6 +131,8 @@ pnpm cf-typegen  # 修改 wrangler.jsonc 后重新生成 worker-configuration.d.
 
 ### 命令行部署
 
+发布前先运行 `pnpm check:release`。以下命令操作真实 Cloudflare 资源，需先确认账号；`wrangler.jsonc` 中的全零 D1 ID 是首次部署配置占位值，必须替换为创建的数据库 ID。
+
 ```sh
 wrangler d1 create yunji-sender                    # 把输出的 database_id 填进 wrangler.jsonc
 wrangler queues create yunji-sender-deliveries      # 不用队列方式时不需要这两个队列
@@ -137,9 +142,9 @@ wrangler secret put ADMIN_PASSWORD               # 后台 basic 认证密码
 pnpm run deploy                                # 完整检查、执行 D1 迁移并发布 Worker
 ```
 
-后续更新时运行 `pnpm run deploy`，脚本会先运行完整检查，再应用新增迁移并发布。GitHub CI 在 push 和 pull request 时运行相同检查，无需部署密钥。
+后续更新时运行 `pnpm run deploy`，脚本会先运行完整检查，再应用新增迁移并发布。GitHub CI 在 push 和 pull request 时运行 `pnpm check:release`，无需部署密钥。Cloudflare 构建环境中的部署脚本运行 `pnpm check`，浏览器验收由 CI 和发布前的 `check:release` 完成。
 
-部署后在后台创建渠道、渠道组和 API Key。
+部署后在后台创建渠道、渠道组和 API Key。首次上线还需在实际部署环境验证登录、真实渠道投递、定时任务、失败重试和统计；本地模拟渠道通过只表示本地链路通过。
 
 **PushPlus**：添加渠道时填入用户 Token 或消息 Token，默认推送到自己的微信公众号。可选填 PushPlus 群组编码、接收渠道、渠道配置编码和指定接收人；群组编码与本系统的渠道组独立。选择短信、语音渠道会使用 PushPlus 的付费服务。Token 和指定接收人加密保存。[官方接口文档](https://pushplus.plus/doc/guide/api.html)
 

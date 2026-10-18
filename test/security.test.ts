@@ -39,7 +39,7 @@ it('removes Bark batch recipients and case aliases while retaining raw content',
   const calls = mockFetch(() => Response.json({ code: 200 }))
   const res = await apiCall(key, '/send', { method: 'POST', body: JSON.stringify({
     channelGroup: 'bark-only', body: 'test', raw: { bark: {
-      body: 'Custom body', device_key: 'other', device_keys: ['other'], DEVICE_KEY: 'alias', DEVICE_KEYS: ['alias'],
+      body: 'Custom body', device_key: 'other', device_keys: ['other'], DEVICE_KEY: 'alias', DEVICE_KEYS: ['alias'], 'devİce_key': 'unicode-device', 'DEVİCE_KEY': 'other-unicode-device',
     } },
   }) }, q.env)
   expect(res.status).toBe(202)

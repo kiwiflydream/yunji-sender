@@ -78,13 +78,13 @@ const SEND_FIELDS: Field[] = [
   { name: 'channelGroup', type: 'string · 按目标选填', description: '渠道组的标识（slug），最长 64。发送给该组所有已启用渠道，使用标识而不是名称或 ID。' },
   { name: 'channels', type: 'string[] · 按目标选填', description: '渠道 ID 数组，最多 50 项。与 channelGroup 至少提供一个；同时提供时合并目标，重复渠道只投递一次。显式指定不存在或已停用的渠道会返回 422。' },
   { name: 'title', type: 'string · 默认空字符串', description: '标题，最长 256。与 body 至少一个非空。' },
-  { name: 'body', type: 'string · 默认空字符串', description: '正文，最长 16,384。各渠道根据自身限制转换或截断内容。' },
+  { name: 'body', type: 'string · 默认空字符串', description: '正文，按 UTF-8 编码最多 16 KB（16,384 字节）。各渠道根据自身限制转换或截断内容。' },
   { name: 'format', type: '"text" | "markdown"', description: '默认 text。Markdown 会按渠道能力转换或降级。' },
   { name: 'level', type: '"info" | "warn" | "error"', description: '默认 info。影响标题前缀、卡片颜色等展示。' },
   { name: 'url', type: 'string | null · 可选', description: 'http:// 或 https:// 链接，最长 2,048。空字符串按 null 处理。' },
   { name: 'tags', type: 'string[] · 默认 []', description: '最多 10 个标签，每项去除首尾空格后长度为 1–32。' },
   { name: 'sendAt', type: 'number | string · 可选', description: '正整数毫秒时间戳或可解析的 ISO 8601 时间。建议明确带上时区，例如 2026-10-18T09:00:00+08:00。最多提前 365 天，省略或已过去按立即发送处理。' },
-  { name: 'raw', type: 'object · 默认 {}', description: '按渠道类型覆盖生成的请求体，例如 {"feishu":{"msg_type":"text","content":{"text":"订单已创建"}}}。目标、签名和收件人仍由渠道配置补充。JSON 序列化后最长 32,768。' },
+  { name: 'raw', type: 'object · 默认 {}', description: '按渠道类型覆盖生成的请求体，例如 {"feishu":{"msg_type":"text","content":{"text":"订单已创建"}}}。目标、签名和收件人仍由渠道配置补充。JSON 序列化后按 UTF-8 编码最多 32 KB；Bark 和 Email 会过滤非 ASCII 顶层字段名。' },
 ]
 
 function FieldList({ fields }: { fields: Field[] }) {
@@ -174,7 +174,7 @@ export default function ApiDocsPage() {
             <Endpoint method="POST" path="/api/send" />
             <p>{tr('请求体为 JSON，')}<code>Content-Type: application/json</code>{tr('。自定义消息支持以下字段；使用模板时请参考下一节。')}</p>
             <FieldList fields={SEND_FIELDS} />
-            <p className="text-kumo-subtle">{tr('字符串长度按 JavaScript 的 UTF-16 单元计算，部分表情会占两个单元。未知字段会返回 422。')}</p>
+            <p className="text-kumo-subtle">{tr('标题等字符数量限制按 UTF-16 单元计算；正文、raw 和模板变量的 KB 限制按 UTF-8 字节计算，1 KB = 1,024 字节。单个 JSON 请求最多 256 KB，超出返回 413；未知字段返回 422。')}</p>
             <Example title={tr('受理响应示例（202）')} lang="jsonc" code={JSON.stringify(sendResponse, null, 2)} />
             <p><code>sendAt</code>{tr('为实际采用的毫秒时间戳；')}<code>deliveries</code>{tr('为每个目标渠道的投递记录。响应时的状态可能为')}<code>scheduled</code>{tr('、')}<code>queued</code>{tr('，也可能已进入后续阶段，应通过查询接口确认。')}</p>
           </Section>
@@ -184,7 +184,7 @@ export default function ApiDocsPage() {
             <Example title={tr('通过模板发送订单通知')} code={sendCurl(TEMPLATE_REQUEST)} />
             <FieldList fields={[
               { name: 'templateId', type: tr('string · 必填'), description: tr('后台模板的 ID，例如内置的新订单模板 new-order。模板可以编辑或删除，以后台当前配置为准。') },
-              { name: 'variables', type: tr('object · 默认 {}'), description: tr('变量名以英文字母开头，只含字母、数字和下划线，最长 64。值支持字符串、有限数字和布尔值，不支持数组、对象或 null。模板中引用的变量必须齐全，空白字符串视为缺失，0 和 false 是有效值。最多 50 项，单个字符串最长 16,384，整个对象 JSON 序列化后最长 32,768。') },
+              { name: 'variables', type: tr('object · 默认 {}'), description: tr('变量名以英文字母开头，只含字母、数字和下划线，最长 64。值支持字符串、有限数字和布尔值，不支持数组、对象或 null。模板中引用的变量必须齐全，空白字符串视为缺失，0 和 false 是有效值。最多 50 项，单个字符串按 UTF-8 编码最多 16 KB，整个对象 JSON 序列化后最多 32 KB。渲染后的正文最多 16 KB。') },
               { name: 'channelGroup / channels', type: tr('同发送消息 · 可选'), description: tr('不传时使用模板默认目标。传入任意一个字段都会完整替换默认目标，不会额外发给原来的接收人。内置模板初始未配置目标，需要先配置或在请求中指定。') },
               { name: 'sendAt', type: tr('number | string · 可选'), description: tr('支持与自定义消息相同的定时参数。') },
             ]} />
@@ -236,6 +236,7 @@ export default function ApiDocsPage() {
               { name: '401', type: 'unauthorized', description: tr('缺少 Bearer Token，或 API Key 无效、已吊销、已删除。') },
               { name: '403', type: 'forbidden', description: tr('API Key 无权向指定目标发送。响应包含 message 说明原因。') },
               { name: '404', type: 'not_found', description: tr('消息不存在、已清理，或不属于当前 API Key；公开 API 路径不存在也返回此错误。') },
+              { name: '413', type: 'payload_too_large', description: tr('JSON 请求体超过 256 KB，响应 maxBytes 表示允许的最大字节数。') },
               { name: '422', type: 'validation_failed', description: tr('JSON 不合法、参数错误、模板或目标不存在、渠道停用、变量缺失或内容超限。响应 issues 数组包含字段路径 path 和说明 message。') },
               { name: '500', type: 'internal_error', description: tr('服务内部异常。发送请求重试时沿用同一个 Idempotency-Key，避免重复创建消息。') },
             ]} />

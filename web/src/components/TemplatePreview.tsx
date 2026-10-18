@@ -1,7 +1,8 @@
 import { issueMessage } from '../api'
 import { tr, useLocale } from '../i18n'
 import { Input, Text } from '@cloudflare/kumo'
-import { renderedTemplateLength, renderTemplate, templateVariables } from '../../../src/shared/templates'
+import { renderedTemplateByteLength, renderedTemplateLength, renderTemplate, templateVariables } from '../../../src/shared/templates'
+import { BODY_LIMIT } from '../../../src/shared/limits'
 import type { TemplateVariables } from '../../../src/shared/types'
 
 export function TemplatePreview({ content, values, onChange, errors = {} }: {
@@ -12,7 +13,7 @@ export function TemplatePreview({ content, values, onChange, errors = {} }: {
 }) {
   useLocale()
   const keys = templateVariables(content)
-  const tooLong = renderedTemplateLength(content.title, values) > 256 || renderedTemplateLength(content.body, values) > 16 * 1024
+  const tooLong = renderedTemplateLength(content.title, values) > 256 || renderedTemplateByteLength(content.body, values, BODY_LIMIT) > BODY_LIMIT
   const rendered = tooLong ? { title: tr('内容超过长度限制'), body: tr('标题最多 256 字符，正文最多 16 KB，请缩短变量或模板内容。') } : renderTemplate(content, values)
   return (
     <div className="flex flex-col gap-4">

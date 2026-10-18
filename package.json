@@ -9,13 +9,15 @@
     "dev": "vite dev",
     "deploy": "pnpm check && pnpm db:migrate:remote && wrangler deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareBindings --strict-vars=false",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p web && tsc --noEmit -p test",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p web && tsc --noEmit -p test && tsc --noEmit -p e2e",
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm test && pnpm build",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "build": "vite build",
-    "preview": "vite build && vite preview"
+    "preview": "vite build && vite preview",
+    "test:e2e": "node scripts/test-e2e.mjs",
+    "check:release": "pnpm check && pnpm test:e2e"
   },
   "cloudflare": {
     "bindings": {
@@ -43,7 +45,9 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.64.0",
     "@cloudflare/vitest-plugin": "^1.4.3",
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^22.20.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",

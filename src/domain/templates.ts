@@ -1,5 +1,6 @@
 import { z } from 'zod'
-import { renderedTemplateLength, renderTemplate, templateVariables, validTemplateText } from '../shared/templates'
+import { renderedTemplateByteLength, renderedTemplateLength, renderTemplate, templateVariables, validTemplateText } from '../shared/templates'
+import { BODY_LIMIT, VARIABLES_LIMIT, utf8ByteLength } from '../shared/limits'
 import { MESSAGE_FORMATS, MESSAGE_LEVELS, type MessageTemplate } from '../shared/types'
 import { parseOrThrow, ValidationError } from './errors'
 
@@ -13,7 +14,7 @@ export const templateInputSchema = z.object({
   name: z.string().trim().min(1, '名称不能为空').max(100),
   description: z.string().trim().max(500).default(''),
   title: textSchema(256).default(''),
-  body: textSchema(16 * 1024).default(''),
+  body: textSchema(BODY_LIMIT).refine((v) => utf8ByteLength(v) <= BODY_LIMIT, '正文不能超过 16 KB').default(''),
   format: z.enum(MESSAGE_FORMATS).default('text'),
   level: z.enum(MESSAGE_LEVELS).default('info'),
   channelGroup: z.string().trim().min(1).max(64).nullable().default(null),
@@ -23,8 +24,10 @@ export const templateInputSchema = z.object({
 
 const templateSendSchema = z.object({
   templateId: idSchema,
-  variables: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.string().max(16 * 1024), z.number().finite(), z.boolean()]))
-    .refine((v) => Object.keys(v).length <= 50 && JSON.stringify(v).length <= 32 * 1024, '变量最多 50 个，总长度不能超过 32 KB').default({}),
+  variables: z.record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([
+    z.string().max(BODY_LIMIT).refine((v) => utf8ByteLength(v) <= BODY_LIMIT, '变量值不能超过 16 KB'), z.number().finite(), z.boolean(),
+  ]))
+    .refine((v) => Object.keys(v).length <= 50 && utf8ByteLength(JSON.stringify(v)) <= VARIABLES_LIMIT, '变量最多 50 个，总长度不能超过 32 KB').default({}),
   channelGroup: z.string().trim().min(1).max(64).optional(),
   channels: z.array(z.string().trim().min(1)).max(50).optional(),
   sendAt: z.union([z.number().int().positive(), z.string().trim().min(1)]).optional(),
@@ -106,7 +109,7 @@ export async function expandTemplateRequest(db: D1Database, raw: unknown): Promi
   const template = await getTemplate(db, input.templateId)
   if (!template) throw new ValidationError([{ path: 'templateId', message: '模板不存在' }])
   if (renderedTemplateLength(template.title, input.variables) > 256) throw new ValidationError([{ path: 'title', message: '模板渲染后的标题不能超过 256 字符' }])
-  if (renderedTemplateLength(template.body, input.variables) > 16 * 1024) throw new ValidationError([{ path: 'body', message: '模板渲染后的正文不能超过 16 KB' }])
+  if (renderedTemplateByteLength(template.body, input.variables, BODY_LIMIT) > BODY_LIMIT) throw new ValidationError([{ path: 'body', message: '模板渲染后的正文不能超过 16 KB' }])
   const rendered = renderTemplate(template, input.variables)
   if (rendered.missing.length) throw new ValidationError(rendered.missing.map((key) => ({ path: `variables.${key}`, message: `缺少变量：${key}` })))
   const overrideTargets = input.channelGroup !== undefined || input.channels !== undefined
