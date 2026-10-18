@@ -1,3 +1,4 @@
+import { clearStatsCache } from '../src/domain/stats-cache'
 import { applyD1Migrations } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { beforeEach } from 'vitest'
@@ -9,6 +10,7 @@ const defaultTemplates = (await env.DB.prepare('SELECT * FROM message_templates'
 
 // D1 is isolated per file, not per test: reset state every test.
 beforeEach(async () => {
+  clearStatsCache(env.DB)
   await env.DB.batch(
     ['usage_counters', 'deliveries', 'messages', 'channel_group_channels', 'channel_groups', 'channels', 'api_keys', 'settings', 'delivery_stats', 'message_templates'].map((t) =>
       env.DB.prepare(`DELETE FROM ${t}`),

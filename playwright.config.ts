@@ -23,9 +23,10 @@ export default defineConfig({
   },
   projects: [
     { name: 'api', testMatch: 'api.spec.ts' },
-    ...(['zh-CN', 'en'] as const).flatMap((locale) => [
-      { name: `desktop-${locale}`, testMatch: 'admin.spec.ts', use: { locale, viewport: { width: 1440, height: 1000 } } },
-      { name: `mobile-${locale}`, testMatch: 'admin.spec.ts', use: { locale, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
+    ...(['zh-CN', 'en'] as const).flatMap((locale, i) => [
+      { name: `desktop-${locale}`, testMatch: 'admin.spec.ts', use: { locale, extraHTTPHeaders: { 'cf-connecting-ip': `192.0.2.${10+i*2}` }, viewport: { width: 1440, height: 1000 } } },
+      { name: `mobile-${locale}`, testMatch: 'admin.spec.ts', use: { locale, extraHTTPHeaders: { 'cf-connecting-ip': `192.0.2.${11+i*2}` }, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
     ]),
+    { name: 'limits', testMatch: 'limits.spec.ts' },
   ],
 })

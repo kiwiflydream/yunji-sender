@@ -1,5 +1,9 @@
 // UI text only. Saved messages, names and protocol identifiers are never translated.
 export const en: Record<string, string> = {
+  "请求过于频繁，请稍后重试": "Too many requests. Please try again later.",
+  "服务暂时不可用，请稍后重试": "Service temporarily unavailable. Please try again later.",
+  "入口或统计读取超过限流阈值，请按 Retry-After 等待后重试。": "The ingress or statistics read rate limit was exceeded. Respect Retry-After before retrying.",
+  "限流服务暂时不可用或统计查询繁忙，请按 Retry-After 等待后重试。": "Rate limiting is temporarily unavailable or statistics queries are busy. Respect Retry-After before retrying.",
   "请求体未在 10 秒内读取完成。请检查网络并沿用同一个 Idempotency-Key 重试。": "The request body was not received within 10 seconds. Check your connection and retry with the same Idempotency-Key.",
   "请求体读取超时，请检查网络后重试": "Request body read timed out. Check your connection and retry.",
   "429 表示费用保护额度耗尽或积压已满，503 表示管理员已暂停发送。遵守 Retry-After，并沿用同一个 Idempotency-Key 重试。": "429 means a cost protection quota or backlog limit was reached; 503 means sending is paused. Respect Retry-After and retry with the same Idempotency-Key.",

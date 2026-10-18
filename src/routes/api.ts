@@ -1,3 +1,4 @@
+import { limitIngress } from '../auth/rate-limit'
 import { Hono } from 'hono'
 import { requireApiKey, type ApiVariables } from '../auth/api-key'
 import { cancelMessage, getMessage, sendMessage } from '../domain/messages'
@@ -8,6 +9,7 @@ export const api = new Hono<{ Bindings: CloudflareBindings; Variables: ApiVariab
 
 api.onError(handleError)
 api.notFound((c) => c.json({ error: 'not_found' }, 404))
+api.use('*', limitIngress('api'))
 api.use('*', requireApiKey)
 
 api.post('/send', async (c) => {

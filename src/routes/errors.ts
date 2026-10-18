@@ -1,3 +1,4 @@
+import { StatsCacheBusyError } from '../domain/stats-cache'
 import type { Context } from 'hono'
 import { ForbiddenError, ValidationError } from '../domain/errors'
 import { JSON_REQUEST_LIMIT } from '../shared/limits'
@@ -9,6 +10,10 @@ class RequestBodyTimeoutError extends Error {}
 const REQUEST_BODY_TIMEOUT_MS = 10_000
 
 export function handleError(err: Error, c: Context) {
+  if (err instanceof StatsCacheBusyError) {
+    c.header('retry-after', '10')
+    return c.json({ error: 'temporarily_unavailable' }, 503)
+  }
   if (err instanceof RequestBodyTimeoutError) return c.json({ error: 'request_timeout' }, 408)
   const code = safetyCode(err)
   if (code) {

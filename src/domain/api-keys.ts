@@ -85,7 +85,7 @@ export interface ApiCaller {
 
 /** Look up an active key by its hash (the hash lookup is not timing-sensitive). */
 export async function verifyApiKey(db: D1Database, key: string, now = Date.now()): Promise<ApiCaller | null> {
-  if (!key.startsWith(KEY_PREFIX)) return null
+  if (!/^cfs_[A-Za-z0-9_-]{32}$/.test(key)) return null
   const row = await db
     .prepare('SELECT id, channel_groups, last_used_at FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL')
     .bind(await sha256Hex(key))

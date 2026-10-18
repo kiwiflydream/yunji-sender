@@ -1,3 +1,5 @@
+import { cachedStats } from '../domain/stats-cache'
+import { enforceRateLimit } from '../auth/rate-limit'
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { createApiKey, deleteApiKey, listApiKeys, revokeApiKey } from '../domain/api-keys'
@@ -6,7 +8,7 @@ import { createChannel, deleteChannel, getChannel, listChannels, updateChannel }
 import { parseOrThrow, ValidationError } from '../domain/errors'
 import { cancelMessage, getMessage, listMessages, listQuerySchema, retryDelivery, sendMessage } from '../domain/messages'
 import { getRuntimeSettings, putRuntimeSettings, runtimeSettingsSchema } from '../domain/settings'
-import { statsOverview, statsWindow, STATS_RANGES } from '../domain/stats'
+import { STATS_RANGES } from '../domain/stats'
 import { createChannelGroup, deleteChannelGroup, getChannelGroup, listChannelGroups, updateChannelGroup } from '../domain/channel-groups'
 import { deleteTemplate, getTemplate, listTemplates, saveTemplate } from '../domain/templates'
 import { hasDeliveryQueue } from '../delivery/mode'
@@ -107,8 +109,11 @@ adminApi.post('/deliveries/:id/retry', async (c) => {
 
 // Stats & settings
 adminApi.get('/stats', async (c) => {
+  const limited = await enforceRateLimit(c, c.env.STATS_RATE_LIMIT, 'stats')
+  if (limited) return limited
+  c.header('cache-control', 'no-store')
   const q = parseOrThrow(statsQuerySchema, c.req.query())
-  return c.json(await statsOverview(c.env.DB, statsWindow(q.range, Date.now(), q.tz)))
+  return c.json(await cachedStats(c.env.DB, q.range, q.tz))
 })
 adminApi.get('/settings/runtime', async (c) => c.json({ settings: await getRuntimeSettings(c.env.DB) }))
 adminApi.put('/settings/runtime', async (c) => {

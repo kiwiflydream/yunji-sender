@@ -4,6 +4,11 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-16",
   "limits": { "cpu_ms": 1000 },
+  "ratelimits": [
+    { "name": "INBOUND_RATE_LIMIT", "namespace_id": "391701", "simple": { "limit": 300, "period": 60 } },
+    { "name": "INBOUND_TOTAL_LIMIT", "namespace_id": "391702", "simple": { "limit": 1000, "period": 60 } },
+    { "name": "STATS_RATE_LIMIT", "namespace_id": "391703", "simple": { "limit": 30, "period": 60 } }
+  ],
   "observability": {
     "enabled": true
   },

@@ -240,6 +240,8 @@ export default function ApiDocsPage() {
               { name: '413', type: 'payload_too_large', description: tr('JSON 请求体超过 256 KB，响应 maxBytes 表示允许的最大字节数。') },
               { name: '422', type: 'validation_failed', description: tr('JSON 不合法、参数错误、模板或目标不存在、渠道停用、变量缺失或内容超限。响应 issues 数组包含字段路径 path 和说明 message。') },
               { name: '429 / 503', type: 'safety_limit', description: tr('429 表示费用保护额度耗尽或积压已满，503 表示管理员已暂停发送。遵守 Retry-After，并沿用同一个 Idempotency-Key 重试。') },
+              { name: '429', type: 'rate_limited', description: tr('入口或统计读取超过限流阈值，请按 Retry-After 等待后重试。') },
+              { name: '503', type: 'temporarily_unavailable', description: tr('限流服务暂时不可用或统计查询繁忙，请按 Retry-After 等待后重试。') },
               { name: '500', type: 'internal_error', description: tr('服务内部异常。发送请求重试时沿用同一个 Idempotency-Key，避免重复创建消息。') },
             ]} />
             <Example title={tr('模板变量缺失示例（422）')} lang="jsonc" code={JSON.stringify({ error: 'validation_failed', issues: [{ path: 'variables.orderNo', message: tr('缺少变量：orderNo') }] }, null, 2)} />

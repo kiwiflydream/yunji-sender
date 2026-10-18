@@ -13,6 +13,8 @@ export async function call<T = unknown>(path: string, options: {
     method, redirect: 'error',
     headers: {
       ...(token === null ? {} : { authorization: token === undefined ? basic : `Bearer ${token}` }),
+      // Separate the setup client from browser actors in the local simulator.
+      'cf-connecting-ip': '192.0.2.250',
       'content-type': 'application/json', origin: baseURL, ...headers,
     },
     ...(data === undefined ? {} : { body: JSON.stringify(data) }),

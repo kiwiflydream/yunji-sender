@@ -1,3 +1,4 @@
+import { limitIngress } from '../auth/rate-limit'
 import { Hono } from 'hono'
 import { csrf } from 'hono/csrf'
 import { secureHeaders } from 'hono/secure-headers'
@@ -15,6 +16,7 @@ type AdminEnv = { Bindings: CloudflareBindings; Variables: AdminVariables }
  */
 export const admin = new Hono<AdminEnv>()
 
+admin.use('*', limitIngress('admin'))
 admin.use('*', requireAdmin)
 admin.use('*', csrf())
 

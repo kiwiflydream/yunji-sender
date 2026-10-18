@@ -86,3 +86,15 @@ Access 公钥获取包含响应体读取，最多等待 5 秒；并发认证共�
 Queues 支持 Workers Free 和 Paid。Free 包含每天 10,000 次操作及 24 小时消息保留；正常投递通常涉及写入、读取、删除共 3 次操作。项目按目标渠道分别入队，多渠道扇出、重试和死信队列都会增加操作量。具体额度和计价以 [Queues 官方说明](https://developers.cloudflare.com/queues/platform/pricing/)为准。
 
 Worker 请求、CPU、D1 读写与存储也有各自的额度和计费，后台查询、维护和统计同样产生用量。部署后应观察实际用量，按任务规模和保留时间调整配置，详见 [Workers 价格](https://developers.cloudflare.com/workers/platform/pricing/)和 [D1 价格](https://developers.cloudflare.com/d1/platform/pricing/)。
+
+## 入口与统计读取保护
+
+`wrangler.jsonc` 的三个原生 Rate Limiting 绑定在认证和 D1 查询前工作：每个 IP 每类入口（api/admin）每分钟 300 次，每类入口每分钟合计 1000 次；认证后的统计接口另有每分钟 30 次的共享读取限制。来自同一出口 IP 的用户共享入口额度，缺少 Cloudflare IP 头时共享 unknown 桶；不会使用客户端提供的 X-Forwarded-For 或随机密钥划分额度。复制部署到同一账户的新项目时，应为三个绑定分配独立的 namespace_id，避免意外共用额度。
+
+超额返回 `429 rate_limited` 和 `Retry-After: 60`，不进入 D1。限流绑定缺失、报错或等待超过 1 秒时返回 `503 temporarily_unavailable`，不会降级为无限放行。格式不符合当前密钥规范的凭据直接拒绝，不查询 D1。
+
+统计结果按数据库、范围和规范化时区分开缓存 60 秒，同一 Worker 实例内相同查询的并发请求共用一次聚合。最多缓存 16 项、同时运行 4 个不同聚合，超大结果不常驻；查询等待上限 10 秒，失败不缓存。结果最多滞后约 60 秒，渠道改名和投递统计也遵循此刷新周期。缓存不绕过后台认证，HTTP 响应为 no-store。
+
+原生限流按 Cloudflare 节点计数且为最终一致性，缓存也只在当前 Worker 实例内生效；它们不是全球精确额度或金额硬上限，全球投递预算仍由 D1 事务维护。官方说明见 [Rate Limiting](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)。
+
+这些绑定减少到达 D1 的流量，但不会免除已到达 Worker 的请求计费。正式部署自定义域名后，应在域名的边缘防护规则中对 `/api/*` 和 `/admin*` 配置适合实际调用量的限速，并核对其他公开入口是否绕过该规则；当前仓库没有操作线上 WAF。
