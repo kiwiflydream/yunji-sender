@@ -1,6 +1,83 @@
 import { expect, test } from '@playwright/test'
-import type { SendResult, RuntimeSettings, StatsOverview } from '../src/shared/types'
+import type { SendResult, RuntimeSettings, StatsOverview, MessageDetail } from '../src/shared/types'
 import { baseURL, call, createChannel, createKey, providerRecords, providerURL, seed, waitMessage } from './helpers'
+
+test('concurrent HTTP admission preserves idempotency and caller quotas', async () => {
+  const channel = await createChannel('Concurrent admission')
+  const key = await createKey()
+  const { settings } = await call<{ settings: RuntimeSettings }>('/admin/api/settings/runtime')
+  await call('/admin/api/settings/runtime', {
+    method: 'PUT', data: { ...settings, perKeyDailyDeliveryLimit: 2, perKeyMinuteLimit: 2 },
+  })
+  const send = (id: string) => fetch(`${baseURL}/api/send`, {
+    method: 'POST', signal: AbortSignal.timeout(10_000),
+    headers: { authorization: `Bearer ${key.key}`, 'content-type': 'application/json',
+      'idempotency-key': id, 'cf-connecting-ip': '192.0.2.180' },
+    body: JSON.stringify({ channels: [channel.id], body: 'Concurrent fixture', sendAt: Date.now() + 60_000 }),
+  })
+  const accepted = new Set<string>()
+  try {
+    const responses = await Promise.all(Array.from({ length: 8 }, () => send('same-event')))
+    expect(responses.filter(r => r.status === 202)).toHaveLength(1)
+    expect(responses.filter(r => r.status === 200)).toHaveLength(7)
+    for (const response of responses) accepted.add((await response.json() as SendResult).messageId)
+    expect(accepted.size).toBe(1)
+
+    const competing = await Promise.all(Array.from({ length: 6 }, (_, i) => send(`distinct-${i}`)))
+    expect(competing.filter(r => r.status === 202)).toHaveLength(1)
+    expect(competing.filter(r => r.status === 429)).toHaveLength(5)
+    for (const response of competing) {
+      if (response.status === 202) accepted.add((await response.json() as SendResult).messageId)
+      else {
+        expect(Number(response.headers.get('retry-after'))).toBeGreaterThan(0)
+        expect(await response.json()).toMatchObject({ error: 'safety_limit' })
+      }
+    }
+    const duplicate = await send('same-event')
+    expect(duplicate.status).toBe(200)
+    expect(await duplicate.json()).toMatchObject({ duplicate: true })
+    for (const id of accepted) {
+      expect(await call(`/api/messages/${id}/cancel`, { method: 'POST', token: key.key })).toEqual({ canceled: 1 })
+    }
+    expect((await providerRecords()).filter(r => accepted.has(String(r.data.id)))).toHaveLength(0)
+  } finally {
+    await call('/admin/api/settings/runtime', { method: 'PUT', data: settings })
+  }
+})
+
+test('pause blocks due work and test sends, then cron resumes exactly once', async () => {
+  const channel = await createChannel('Pause and resume')
+  const key = await createKey()
+  const { settings } = await call<{ settings: RuntimeSettings }>('/admin/api/settings/runtime')
+  const direct = { ...settings, executionMode: 'direct' }
+  await call('/admin/api/settings/runtime', { method: 'PUT', data: direct })
+  try {
+    const sendAt = Date.now() + 2000
+    const message = await call<SendResult>('/api/send', {
+      method: 'POST', token: key.key, status: 202,
+      data: { channels: [channel.id], body: 'Resume fixture', sendAt },
+    })
+    await call('/admin/api/settings/runtime', { method: 'PUT', data: { ...direct, sendingPaused: true } })
+    expect(await call('/api/send', { method: 'POST', token: key.key, status: 503,
+      data: { channels: [channel.id], body: 'Blocked fixture' } })).toMatchObject({ error: 'safety_limit', reason: 'paused' })
+    expect(await call(`/admin/api/channels/${channel.id}/test`, { method: 'POST', status: 503 }))
+      .toMatchObject({ error: 'safety_limit', reason: 'paused' })
+    await expect.poll(() => Date.now(), { timeout: 5000 }).toBeGreaterThan(sendAt)
+    const cron = () => fetch(`${baseURL}/cdn-cgi/handler/scheduled?cron=*+*+*+*+*`, { signal: AbortSignal.timeout(10_000) })
+    expect((await cron()).ok).toBe(true)
+    const pending = await call<{ message: MessageDetail }>(`/api/messages/${message.messageId}`, { token: key.key })
+    expect(pending.message.deliveries[0]).toMatchObject({ status: 'scheduled', attempts: 0 })
+    expect((await providerRecords()).filter(r => r.data.id === message.messageId)).toHaveLength(0)
+
+    await call('/admin/api/settings/runtime', { method: 'PUT', data: direct })
+    expect((await cron()).ok).toBe(true)
+    expect((await waitMessage(message.messageId, 'sent', key.key)).deliveries[0].attempts).toBe(1)
+    expect((await cron()).ok).toBe(true)
+    expect((await providerRecords()).filter(r => r.data.id === message.messageId)).toHaveLength(1)
+  } finally {
+    await call('/admin/api/settings/runtime', { method: 'PUT', data: settings })
+  }
+})
 
 test('queue and direct delivery lifecycle, scopes, idempotency, cancellation and retries', async () => {
   await call('/admin/api/channels', { token: null, status: 401 })

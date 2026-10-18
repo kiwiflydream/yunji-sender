@@ -1,5 +1,6 @@
 # 投递方式与运行配置
 
+[简体中文](execution.md) · [English](execution.en.md)
 [返回 README](../README.md)
 
 ## 队列与直接发送
@@ -65,7 +66,9 @@
 
 ## 后台认证与语言
 
-默认使用 Basic 认证，用户名来自 `wrangler.jsonc` 的 `ADMIN_USERNAME`，默认 `admin`；密码来自 secret `ADMIN_PASSWORD`。
+**正式部署推荐使用 Cloudflare Access 管理后台登录与访问授权**，通过策略限定允许进入后台的身份。获准进入者均拥有当前后台的管理权限，项目未提供额外的角色分级。配置步骤见 [README](../README.md#4-配置后台认证与加密密钥)。
+
+Basic 是本地开发或快速试用的默认方式，用户名来自 `wrangler.jsonc` 的 `ADMIN_USERNAME`，默认 `admin`；密码来自 secret `ADMIN_PASSWORD`。
 
 使用 Cloudflare Access 时，在 Zero Trust 中创建保护 `/admin` 及其子路径的 Self-hosted 应用，配置访问策略，并在 `wrangler.jsonc` 的 `vars` 中设置：
 
@@ -76,6 +79,8 @@
 | `ACCESS_AUD` | 对应应用的 AUD tag |
 
 Access 公钥获取包含响应体读取，最多等待 5 秒；并发认证共享一次获取，失败或未知签名触发刷新后至少间隔 60 秒再请求，避免认证故障时请求风暴。
+
+团队域名不带协议或路径；Access 模式不需要 `ADMIN_PASSWORD`，也不会在认证失败时回退到 Basic。确认 `/admin`、`/admin/*` 及实际开放的其他域名入口均受保护。
 
 修改后重新部署。`/api/*` 使用 API Key，避免用后台 Access 策略拦截业务调用。
 

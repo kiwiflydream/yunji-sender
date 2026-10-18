@@ -1,5 +1,6 @@
 # 接入指南
 
+[简体中文](usage.md) · [English](usage.en.md)
 [返回 README](../README.md)
 
 ## 渠道、渠道组与 API Key

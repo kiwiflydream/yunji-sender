@@ -1,5 +1,6 @@
 # 本地开发与验证
 
+[简体中文](development.md) · [English](development.en.md)
 [返回 README](../README.md)
 
 项目尚未上线，按全新部署维护：表结构直接更新 `migrations/0001_init.sql`，不保留历史数据升级脚本或旧客户端兼容分支。
@@ -51,7 +52,7 @@ pnpm check:release
 
 Linux CI 可使用 `pnpm exec playwright install --with-deps chromium` 安装系统依赖。
 
-浏览器测试使用空 D1、随机测试密钥和本地模拟渠道，不读取开发数据库或真实渠道凭据，结束后清理临时环境。覆盖中英文桌面与手机页面、模板预览、侧栏及图标，以及队列消费、直接发送、定时取消、失败重试、Cron 补偿、API Key 权限和幂等。
+浏览器测试使用空 D1、随机测试密钥和本地模拟渠道，不读取开发数据库或真实渠道凭据，结束后清理临时环境。覆盖中英文桌面与手机页面、模板预览、侧栏及图标，以及队列消费、直接发送、定时取消、失败重试、Cron 补偿、API Key 权限和幂等。HTTP 集成测试还验证并发幂等、并发额度竞争、额度耗尽后的幂等重放，以及暂停阻止到期投递和渠道测试、恢复后只发送一次。
 
 失败时截图和 trace 保存到已忽略的 `test-results/`。GitHub CI 在 push 和 pull request 时执行 `pnpm check:release`，无需部署密钥；失败附件保留 7 天。
 
@@ -59,7 +60,7 @@ Linux CI 可使用 `pnpm exec playwright install --with-deps chromium` 安装系
 
 `pnpm run deploy` 依次执行 `pnpm check`、远端 D1 初始化和 Wrangler 发布。它不会运行浏览器测试；发布前在本机或 CI 完成 `pnpm check:release`。
 
-首次上线还需在目标 Cloudflare 环境验收登录、真实渠道投递、定时消息、失败重试与统计。本地模拟渠道通过不代表真实渠道已通过验收。
+正式部署的后台认证推荐使用 [Cloudflare Access](../README.md#4-配置后台认证与加密密钥)。首次上线还需在目标 Cloudflare 环境验收登录、真实渠道投递、定时消息、失败重试与统计。本地模拟渠道通过不代表真实渠道已通过验收。
 
 ## 项目结构
 
